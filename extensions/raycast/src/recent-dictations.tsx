@@ -1,6 +1,6 @@
 import { Action, ActionPanel, Icon, List, getPreferenceValues, showToast, Toast } from "@raycast/api";
 import { useEffect, useState } from "react";
-import { type Dictation, historyFile, output, readHistory } from "./history";
+import { type Dictation, escapeMarkdown, historyFile, output, readHistory } from "./history";
 
 interface Preferences {
   dataDir?: string;
@@ -61,7 +61,7 @@ export default function RecentDictations() {
             accessories={accessories}
             detail={
               <List.Item.Detail
-                markdown={text}
+                markdown={escapeMarkdown(text)}
                 metadata={
                   <List.Item.Detail.Metadata>
                     <List.Item.Detail.Metadata.Label title="When" text={at.toLocaleString()} />
