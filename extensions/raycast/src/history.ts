@@ -4,9 +4,11 @@
 
 import { readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 export interface Dictation {
+  /** Unique within one parse (timestamps can repeat). */
+  id: string;
   /** RFC 3339 timestamp with offset. */
   at: string;
   /** Seconds of audio. */
@@ -33,8 +35,9 @@ export function dataDir(override?: string): string {
   const custom = override?.trim() || process.env.STENLY_DATA_DIR;
   if (custom) return expandTilde(custom);
   if (process.platform === "darwin") return join(homedir(), "Library", "Application Support", "stenly");
+  // Like the `directories` crate, ignore a relative XDG_DATA_HOME.
   const xdg = process.env.XDG_DATA_HOME;
-  return join(xdg || join(homedir(), ".local", "share"), "stenly");
+  return join(xdg && isAbsolute(xdg) ? xdg : join(homedir(), ".local", "share"), "stenly");
 }
 
 export function historyFile(override?: string): string {
@@ -42,12 +45,13 @@ export function historyFile(override?: string): string {
 }
 
 /** Validate one parsed JSON value into a Dictation, or null if it isn't one. */
-export function toDictation(v: unknown): Dictation | null {
+export function toDictation(v: unknown, id = ""): Dictation | null {
   if (!v || typeof v !== "object") return null;
   const r = v as Record<string, unknown>;
   if (typeof r.text !== "string" || typeof r.at !== "string") return null;
   if (Number.isNaN(new Date(r.at).getTime())) return null;
   const d: Dictation = {
+    id,
     at: r.at,
     duration: typeof r.duration === "number" && Number.isFinite(r.duration) ? r.duration : 0,
     text: r.text,
@@ -60,10 +64,12 @@ export function toDictation(v: unknown): Dictation | null {
 /** Parse history file contents, newest first. Malformed lines are skipped. */
 export function parseHistory(contents: string): Dictation[] {
   const out: Dictation[] = [];
-  for (const line of contents.split("\n")) {
+  const lines = contents.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     if (!line.trim()) continue;
     try {
-      const d = toDictation(JSON.parse(line));
+      const d = toDictation(JSON.parse(line), `${i}`);
       if (d) out.push(d);
     } catch {
       // skip

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { escapeMarkdown, output, parseHistory } from "./history.ts";
+import { dataDir, escapeMarkdown, output, parseHistory } from "./history.ts";
 
 // Synthetic history in Stenly's on-disk shape (oldest first).
 const SAMPLE = [
@@ -49,4 +49,29 @@ test("escapeMarkdown neutralizes images, links and HTML", () => {
   assert.ok(s.includes("\\!\\[x\\]\\(https://example\\.com/a\\.png\\)"));
   assert.ok(s.includes("\\<img src=\"https://example\\.com/b\"\\>"));
   assert.equal(escapeMarkdown("a\nb"), "a  \nb");
+});
+
+test("entries with the same timestamp get distinct ids", () => {
+  const row = '{"at":"2026-01-02T11:00:00+09:00","duration":1,"text":"same time"}';
+  const h = parseHistory(`${row}\n${row}`);
+  assert.equal(h.length, 2);
+  assert.notEqual(h[0].id, h[1].id);
+});
+
+test("dataDir ignores a relative XDG_DATA_HOME like the Rust side", () => {
+  const saved = { xdg: process.env.XDG_DATA_HOME, data: process.env.STENLY_DATA_DIR };
+  delete process.env.STENLY_DATA_DIR;
+  try {
+    assert.equal(dataDir("/synthetic/dir"), "/synthetic/dir");
+    if (process.platform !== "darwin") {
+      process.env.XDG_DATA_HOME = "relative/path";
+      assert.ok(!dataDir().startsWith("relative"));
+      process.env.XDG_DATA_HOME = "/synthetic/xdg";
+      assert.equal(dataDir(), "/synthetic/xdg/stenly");
+    }
+  } finally {
+    if (saved.xdg === undefined) delete process.env.XDG_DATA_HOME;
+    else process.env.XDG_DATA_HOME = saved.xdg;
+    if (saved.data !== undefined) process.env.STENLY_DATA_DIR = saved.data;
+  }
 });

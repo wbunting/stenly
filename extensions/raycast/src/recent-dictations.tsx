@@ -53,7 +53,8 @@ export default function RecentDictations() {
         const copy = <Action.CopyToClipboard key="copy" title="Copy Dictation" content={text} />;
         return (
           <List.Item
-            key={d.at}
+            key={d.id}
+            id={d.id}
             icon={Icon.Microphone}
             title={firstLine(text)}
             subtitle={showDetail ? relativeTime(at) : undefined}
