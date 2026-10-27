@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block main %}
+    <main id="main">
+      <section class="headline" aria-label="Meet Stenly">
+        <h1><span class="headline-sans">Know who said what.</span><span class="headline-serif">Bring the meeting <em>to your agent.</em></span></h1>
+        <div class="cover-caption flex items-center justify-between"><span>Local-first meeting recording and dictation.</span><span>macOS + Linux · no bot joins the call.</span></div>
+      </section>
+
+      <section class="editorial" aria-label="What makes Stenly different">
+        <div class="story">
+          <h2>Names in the transcript.<br>Context in the codebase.</h2>
+          <p>Stenly connects the active-speaker highlight in the meeting app with remembered local voiceprints and the invite. Then it makes the resulting meeting history available to the agent you already code with.</p>
+          <div class="ownership"><span class="mini-mark"><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M8 18v4m6-11v18m6-24v30m6-22v14m6-9v4"/></svg></span><p><strong>No bot. Your local history.</strong><br><code>stenly-mcp install</code> connects read-only meeting history to Claude Code, Codex, and Cursor; the context agent prepares the relevant background.</p></div>
+        </div>
+
+        <div class="specimen">
+          <div class="note-topline"><span class="inline-flex items-center gap-2"><span class="recording-dot"></span>From conversation to context</span><span class="example-label">Illustrative example</span></div>
+          <article class="meeting-note" aria-label="Interactive example meeting note">
+            <div class="note-header flex items-center justify-between"><span class="note-brand"><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M8 18v4m6-11v18m6-24v30m6-22v14m6-9v4"/></svg> stenly</span><div class="note-tabs" hidden role="group" aria-label="Example view"><button type="button" data-view="notes" aria-pressed="true">Notes</button><button type="button" data-view="transcript" aria-pressed="false">Transcript</button></div></div>
+            <h3>What the agent needs</h3>
+            <p class="note-meta">Product + engineering sync <span>·</span> Maya & Alex</p>
+            <div id="notes-panel" class="note-panel" aria-label="Example notes">
+              <h4>The decision</h4>
+              <p>Keep the first-run setup small and make recording consent easy to explain before the next call.</p>
+              <h4>What happens next</h4>
+              <ul><li><span class="note-check" aria-hidden="true"></span><span><strong>Maya</strong> to simplify the welcome screen.</span></li><li><span class="note-check" aria-hidden="true"></span><span><strong>Alex</strong> to add the agreed copy to the implementation plan.</span></li></ul>
+            </div>
+            <div id="transcript-panel" class="note-panel" hidden aria-label="Example transcript">
+              <p class="transcript-line"><span>Maya <time>00:24</time></span>“Let’s make the first-run setup smaller and be plain about recording consent.”</p>
+              <p class="transcript-line"><span>Alex <time>00:38</time></span>“I’ll add that copy to the plan and send it to the agent with the meeting context.”</p>
+            </div>
+            <div class="note-bottom"><span>Saved as Markdown. Ready for your agent.</span><span class="waveform" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span></div>
+          </article>
+        </div>
+
+        <div class="get-stenly" id="get-stenly">
+          <div class="app-mark"><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M8 18v4m6-11v18m6-24v30m6-22v14m6-9v4"/></svg></div>
+          <h2>A local memory<br>for the work that follows.</h2>
+          <p>Record meetings and dictate in one native Rust app. Notes go to the Obsidian vault you choose. <a class="inline-link" href="/pricing/">See pricing</a></p>
+          <p class="availability" id="downloads-unavailable"><strong>Public source publication and desktop installers are not available yet.</strong></p>
+          {% if config.extra.hosted_url %}<a class="hosted-link" href="{{ config.extra.hosted_url }}">Prefer us to host it? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>{% endif %}
+        </div>
+      </section>
+
+      <section class="feature-strip" aria-label="Privacy and availability">
+        <p><strong>Local by default.</strong> Recordings, voiceprints, transcripts, and Markdown notes stay on your machine unless you configure an external service.</p>
+        <p><strong>Consent stays with you.</strong> No bot joins the call; you remain responsible for the notice and consent rules that apply to everyone involved.</p>
+        <p><strong>Encrypted sharing is available.</strong> Encrypted share links are live at <a href="https://share.stenly.ai">share.stenly.ai</a> or your configured server. Self-hosted company mode works; hosted company sign-in is unverified.</p>
+      </section>
+    </main>
+{% endblock main %}

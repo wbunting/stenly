@@ -1,0 +1,75 @@
+# stenly-share (server/stenly-share): tests + Docker image build.
+#
+# hearth is public and fetched anonymously over HTTPS at a pinned revision, so
+# every job runs without secrets (including on pull requests from forks).
+name: share-server
+
+on:
+  push:
+    branches: [main]
+    paths: ["server/**", ".github/workflows/share-server.yml"]
+  pull_request:
+    paths: ["server/**", ".github/workflows/share-server.yml"]
+
+concurrency:
+  group: share-server-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: server/stenly-share
+
+jobs:
+  viewer:
+    name: viewer (WebCrypto decrypt + markdown)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test web/viewer.test.mjs
+
+  rust:
+    name: cargo test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            server/stenly-share/target
+          key: share-${{ runner.os }}-${{ hashFiles('server/stenly-share/Cargo.lock', 'server/stenly-share/rust-toolchain.toml') }}
+      - name: Toolchain + topcoat CLI
+        run: |
+          rustup show active-toolchain || rustup toolchain install
+          cargo install --locked --git https://github.com/wbunting/hearth.git --rev 82875db6f13aa5f3f333bdfdbf68e97d3b04dff3 topcoat-cli
+      - name: Build, bundle assets, test
+        run: |
+          cargo build --release --locked
+          topcoat asset bundle --release
+          cargo test --release --locked
+          cargo clippy --release --locked --all-targets -- -D warnings
+
+  docker:
+    name: docker build + smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: server/stenly-share
+          load: true
+          tags: stenly-share:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Smoke test
+        run: |
+          docker run -d --name ss -p 8080:8080 stenly-share:ci
+          for _ in $(seq 1 30); do curl -fsS localhost:8080/healthz && break; sleep 1; done
+          curl -fsS localhost:8080/api/v1/info
+          node scripts/share-note.mjs http://localhost:8080
+          docker logs ss

@@ -1,0 +1,8 @@
+{$SHARE_DOMAIN} {
+	encode zstd gzip
+	# Uploads are at most STENLY_SHARE_MAX_BYTES (base64 adds a third).
+	request_body {
+		max_size 4MB
+	}
+	reverse_proxy stenly-share:8080
+}

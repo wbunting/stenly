@@ -1,0 +1,21 @@
+# Single container with a persistent volume. Put it behind your own TLS
+# proxy (or see docker-compose.caddy.yml). Browsers only decrypt notes on
+# https:// pages (and http://localhost), so production needs TLS.
+#
+#   docker compose up -d
+services:
+  stenly-share:
+    image: stenly-share:latest   # build it: docker build -t stenly-share ..
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      STENLY_SHARE_BASE_URL: "https://share.example.com"
+      # STENLY_SHARE_UPLOAD_TOKEN: "change-me"   # require a token to create shares
+      # STENLY_SHARE_MAX_BYTES: "2097152"
+      # STENLY_SHARE_DEFAULT_TTL_DAYS: "90"
+    volumes:
+      - stenly-share-data:/data
+
+volumes:
+  stenly-share-data:

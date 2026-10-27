@@ -1,0 +1,19 @@
+[package]
+name = "stenly-agent"
+description = "Context agent for stenly: a small tool-calling loop over an OpenAI-compatible model that gathers background on a meeting from past meetings, the notes vault, Notion and the user's MCP servers."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+stenly-core.workspace = true
+stenly-mcp.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true
+ureq.workspace = true
+
+[dev-dependencies]
+tempfile = "3"

@@ -1,0 +1,16 @@
+[package]
+name = "stenly-asr"
+description = "Local speech recognition for stenly: Silero VAD + NVIDIA Parakeet via sherpa-onnx."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+stenly-core.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+sherpa-onnx.workspace = true
+ureq.workspace = true
+crossbeam-channel.workspace = true
+serde_json.workspace = true
+serde.workspace = true

@@ -1,0 +1,54 @@
+[package]
+name = "stenly"
+description = "Invisible local-first meeting recorder: calendar nudges, on-device Parakeet ASR, Obsidian notes."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["tray"]
+# Menubar / StatusNotifierItem icon. Linux uses the KSNI (D-Bus) backend: no GTK.
+tray = ["dep:tray-icon"]
+# Linux sound-server backends for cpal.
+pipewire = ["stenly-platform/pipewire"]
+pulseaudio = ["stenly-platform/pulseaudio"]
+# Linux display servers (gpui).
+wayland = ["gpui_platform/wayland"]
+x11 = ["gpui_platform/x11"]
+# Dev: STENLY_SNAPSHOT=<dir> dumps every window to PNG each few seconds (no
+# screen-recording permission needed; renders gpui's own scene offscreen).
+snapshot = ["gpui/test-support", "gpui_platform/test-support"]
+
+[dependencies]
+stenly-core.workspace = true
+stenly-asr.workspace = true
+stenly-platform.workspace = true
+stenly-mcp.workspace = true
+stenly-agent.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+chrono.workspace = true
+crossbeam-channel.workspace = true
+toml_edit.workspace = true
+gpui.workspace = true
+gpui_platform.workspace = true
+raw-window-handle = "0.6"
+notify = "8"
+unicode-segmentation = "1"
+directories.workspace = true
+serde_json.workspace = true
+image = { version = "0.25", default-features = false }
+smallvec = "1"
+ureq.workspace = true
+semver = "1"
+
+[dev-dependencies]
+# TestAppContext / #[gpui::test] for the text input tests
+gpui = { workspace = true, features = ["test-support"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+tray-icon = { version = "0.26", optional = true, default-features = false }
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+tray-icon = { version = "0.26", optional = true, default-features = false, features = ["ksni"] }

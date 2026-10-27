@@ -1,0 +1,47 @@
+# stenly-share behind Caddy with automatic HTTPS (Let's Encrypt).
+# Point DNS for SHARE_DOMAIN at this host, open ports 80 and 443, then:
+#
+#   SHARE_DOMAIN=share.example.com docker compose -f docker-compose.caddy.yml up -d
+services:
+  stenly-share:
+    image: stenly-share:latest
+    restart: unless-stopped
+    environment:
+      STENLY_SHARE_BASE_URL: "https://${SHARE_DOMAIN:?set SHARE_DOMAIN}"
+      # Caddy is the only proxy in front: trust its X-Forwarded-For so rate
+      # limiting sees real client IPs (Compose's default bridge network).
+      STENLY_SHARE_TRUSTED_PROXIES: "172.16.0.0/12"
+      # STENLY_SHARE_UPLOAD_TOKEN: "change-me"
+    volumes:
+      - stenly-share-data:/data
+    expose:
+      - "8080"
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      SHARE_DOMAIN: "${SHARE_DOMAIN}"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      - stenly-share
+
+volumes:
+  stenly-share-data:
+  caddy-data:
+  caddy-config:
+
+# Company mode: add to stenly-share's environment.
+#   STENLY_SHARE_OIDC_ISSUER: "https://accounts.google.com"
+#   STENLY_SHARE_OIDC_CLIENT_ID: "…"
+#   STENLY_SHARE_OIDC_CLIENT_SECRET: "…"
+#   STENLY_SHARE_ALLOWED_EMAIL_DOMAINS: "example.com"
+#   STENLY_SHARE_ADMINS: "it@example.com"
+#   STENLY_SHARE_UPLOAD_AUTH: "user"   # optional: personal tokens only

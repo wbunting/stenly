@@ -1,0 +1,5 @@
+# hearth (Topcoat fork) needs rustc >= 1.99. The desktop app stays on stable.
+[toolchain]
+channel = "1.99.1"
+components = ["rustfmt", "clippy"]
+profile = "minimal"

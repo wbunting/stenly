@@ -1,0 +1,58 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+# internal
+stenly-core = { path = "crates/stenly-core" }
+stenly-asr = { path = "crates/stenly-asr" }
+stenly-platform = { path = "crates/stenly-platform" }
+stenly-mcp = { path = "crates/stenly-mcp" }
+stenly-agent = { path = "crates/stenly-agent" }
+
+anyhow = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.9"
+toml_edit = "0.25"
+chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+rrule = "0.14"
+ureq = { version = "3", features = ["json"] }
+hound = "3.5"
+rubato = "1"
+crossbeam-channel = "0.5"
+directories = "6"
+regex = "1"
+sherpa-onnx = "1.13.8"
+cpal = "0.18"
+clap = { version = "4", features = ["derive"] }
+aes-gcm = "0.10"
+base64 = "0.22"
+getrandom = "0.3"
+
+# gpui_platform isn't on crates.io; pin every Zed crate to one commit (same rev as
+# the other local gpui projects so the git checkout is shared).
+gpui = { git = "https://github.com/zed-industries/zed", rev = "2a97fbf22bd6c500a3968b79fb5b02adee68c975" }
+gpui_platform = { git = "https://github.com/zed-industries/zed", rev = "2a97fbf22bd6c500a3968b79fb5b02adee68c975", features = ["font-kit", "runtime_shaders"] }
+
+[profile.dev.package."*"]
+opt-level = 2
+
+
+# accesskit_macos 0.26.3 + AccessKit PR #822: don't reset the content view's
+# class when KVO has subclassed it (AppKit's Touch Bar finder does), which
+# otherwise aborts the app with NSRangeException when a window closes on
+# macOS 26. Remove once gpui depends on an AccessKit release with #822.
+# Repro: STENLY_STRESS_WINDOWS=25 target/release/stenly (aborts unpatched).
+[patch.crates-io]
+accesskit_macos = { path = "vendor/accesskit_macos" }

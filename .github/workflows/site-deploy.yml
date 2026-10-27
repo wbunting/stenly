@@ -1,0 +1,55 @@
+name: Deploy Stenly site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/site-deploy.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stenly-site-production
+  cancel-in-progress: false
+
+jobs:
+  build-and-deploy:
+    name: Build, test, and deploy Cloudflare Pages
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - name: Check out exact triggering commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.sha }}
+      - name: Set up Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install Zola
+        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
+        with:
+          tool: zola@0.23.6
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Run browser tests
+        run: |
+          npx playwright install --with-deps chromium
+          npm test
+      - name: Validate Zola site
+        run: zola check
+      - name: Build production site
+        run: npm run build:pages
+      - name: Deploy to Cloudflare Pages
+        run: npx wrangler pages deploy public --project-name stenly-site --branch main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ vars.CLOUDFLARE_ACCOUNT_ID }}

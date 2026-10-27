@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Pricing — Stenly{% endblock title %}
+{% block description %}Build Stenly yourself for free, buy a ready-to-run licence, or talk to us about self-hosting for your team.{% endblock description %}
+{% block canonical %}https://stenly.ai/pricing/{% endblock canonical %}
+{% block og_title %}Pricing — Stenly{% endblock og_title %}
+{% block og_url %}https://stenly.ai/pricing/{% endblock og_url %}
+{% block body_class %}pricing-page{% endblock body_class %}
+{% block pricing_current %} is-current" aria-current="page{% endblock pricing_current %}
+{% block main %}
+<main id="main" class="pricing-main">
+  <section class="pricing-intro" aria-labelledby="pricing-title">
+    <h1 id="pricing-title"><span>Free to build.</span><em>Fair to keep.</em></h1>
+    <p>Choose how much of the work you want to do.</p>
+  </section>
+
+  <section class="pricing-grid" aria-label="Pricing options">
+    <article class="price-column">
+      <div class="price-header"><h2>Build it yourself</h2><p class="price">Free</p></div>
+      <p class="price-summary">For people who are happy to compile, sign, rebuild, and update Stenly on their own.</p>
+      <ul class="price-list"><li>Full source code</li><li>Compile and sign it yourself</li><li>Manage updates yourself</li></ul>
+      <p class="price-action secondary-action">Public source publication is not available yet.</p>
+    </article>
+
+    <article class="price-column price-featured">
+      <div class="price-header"><h2>Ready to run</h2><p class="price">Pending</p></div>
+      <p class="price-summary">Public desktop installers are not available yet. Pricing and licence details are still being finalized.</p>
+      <p class="price-action primary-action">Desktop release pending</p>
+    </article>
+
+    <article class="price-column">
+      <div class="price-header"><h2>For your team</h2><p class="price">Sharing available</p></div>
+      <p class="price-summary">Encrypted sharing is available with the default service or a configured self-hosted server. Public source release and desktop installers are not available yet.</p>
+      <ul class="price-list"><li>Encrypted note sharing</li><li>Self-hostable server</li><li>Hosted company sign-in not verified</li></ul>
+      <a class="price-action secondary-action" href="{{ config.extra.team_contact_url }}">Talk to us <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+    </article>
+  </section>
+
+  <section class="pricing-notes" aria-label="Pricing notes">
+    <p>Public download availability and pricing details will be announced when finalized.</p>
+  </section>
+</main>
+{% endblock main %}

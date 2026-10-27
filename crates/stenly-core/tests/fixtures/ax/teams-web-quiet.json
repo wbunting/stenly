@@ -1,0 +1,2337 @@
+[
+ {
+  "app": "net.imput.helium",
+  "title": "Sync | Acme - Work | Microsoft Teams - Camera and microphone recording - Helium - Work",
+  "root": {
+   "role": "AXWindow",
+   "subrole": "AXStandardWindow",
+   "children": [
+    {
+     "children": [
+      {
+       "children": [
+        {
+         "children": [
+          {
+           "classes": [
+            "BrowserView"
+           ],
+           "children": [
+            {
+             "children": [
+              {
+               "children": [
+                {
+                 "role": "AXButton",
+                 "classes": [
+                  "BackForwardButton"
+                 ],
+                 "title": "Back",
+                 "domId": "view_1001",
+                 "desc": "Back"
+                },
+                {
+                 "title": "Forward",
+                 "domId": "view_1002",
+                 "classes": [
+                  "BackForwardButton"
+                 ],
+                 "role": "AXButton",
+                 "desc": "Forward"
+                },
+                {
+                 "desc": "Reload",
+                 "role": "AXButton",
+                 "title": "Reload",
+                 "domId": "view_1003",
+                 "classes": [
+                  "ReloadButton"
+                 ]
+                },
+                {
+                 "classes": [
+                  "LocationBarView"
+                 ],
+                 "subrole": "AXApplicationGroup",
+                 "children": [
+                  {
+                   "role": "AXButton",
+                   "classes": [
+                    "PermissionDashboardView"
+                   ]
+                  },
+                  {
+                   "title": "Address and search bar",
+                   "desc": "Address and search bar",
+                   "role": "AXTextField",
+                   "value": "teams.microsoft.com/\u2026",
+                   "domId": "view_1012",
+                   "classes": [
+                    "OmniboxViewViews"
+                   ]
+                  },
+                  {
+                   "role": "AXGroup",
+                   "children": [
+                    {
+                     "title": "Bookmark this tab",
+                     "role": "AXButton",
+                     "classes": [
+                      "PageActionView"
+                     ],
+                     "desc": "Bookmark this tab"
+                    }
+                   ],
+                   "classes": [
+                    "PageActionContainerView"
+                   ]
+                  }
+                 ],
+                 "role": "AXGroup"
+                },
+                {
+                 "role": "AXGroup",
+                 "classes": [
+                  "ExtensionsToolbarDesktop"
+                 ],
+                 "children": [
+                  {
+                   "domId": "view_1009",
+                   "role": "AXPopUpButton",
+                   "desc": "uBlock Origin (3)\nHas access to this site",
+                   "classes": [
+                    "ToolbarActionView"
+                   ],
+                   "title": "uBlock Origin (3)\nHas access to this site"
+                  },
+                  {
+                   "title": "1Password\nHas access to this site",
+                   "role": "AXPopUpButton",
+                   "desc": "1Password\nHas access to this site",
+                   "domId": "view_1009",
+                   "classes": [
+                    "ToolbarActionView"
+                   ]
+                  },
+                  {
+                   "classes": [
+                    "ToolbarActionView"
+                   ],
+                   "role": "AXPopUpButton",
+                   "domId": "view_1009",
+                   "desc": "Dark Reader\nHas access to this site",
+                   "title": "Dark Reader\nHas access to this site"
+                  },
+                  {
+                   "desc": "Extensions",
+                   "domId": "view_1006",
+                   "classes": [
+                    "ExtensionsToolbarButton"
+                   ],
+                   "title": "Extensions",
+                   "role": "AXPopUpButton"
+                  }
+                 ]
+                },
+                {
+                 "desc": "Work",
+                 "classes": [
+                  "AvatarToolbarButton"
+                 ],
+                 "title": "Work",
+                 "role": "AXButton",
+                 "domId": "view_1018"
+                },
+                {
+                 "desc": "Helium",
+                 "domId": "view_1007",
+                 "title": "Helium",
+                 "classes": [
+                  "BrowserAppMenuButton"
+                 ],
+                 "role": "AXPopUpButton"
+                }
+               ],
+               "domId": "view_1000",
+               "role": "AXToolbar",
+               "classes": [
+                "ToolbarView"
+               ]
+              }
+             ],
+             "role": "AXGroup",
+             "classes": [
+              "TopContainerView"
+             ]
+            },
+            {
+             "role": "AXGroup",
+             "classes": [
+              "MultiContentsView"
+             ],
+             "children": [
+              {
+               "role": "AXGroup",
+               "classes": [
+                "MultiContentsBackgroundView"
+               ]
+              },
+              {
+               "classes": [
+                "ContentsContainerView"
+               ],
+               "role": "AXGroup",
+               "children": [
+                {
+                 "role": "AXGroup",
+                 "classes": [
+                  "View"
+                 ]
+                },
+                {
+                 "role": "AXScrollArea",
+                 "children": [
+                  {
+                   "title": "Sync | Acme - Work | Microsoft Teams",
+                   "children": [
+                    {
+                     "role": "AXGroup",
+                     "children": [
+                      {
+                       "children": [
+                        {
+                         "children": [
+                          {
+                           "classes": [
+                            "___j1g8ec0",
+                            "fxugw4r",
+                            "f1c2ex4k",
+                            "f12bqx6p",
+                            "f1buevke",
+                            "fbd532e",
+                            "f89e11u",
+                            "f10pi13n",
+                            "f22iagw",
+                            "f122n59",
+                            "f1869bpl",
+                            "f113iaar",
+                            "f5p0z4x"
+                           ],
+                           "role": "AXGroup",
+                           "children": [
+                            {
+                             "classes": [
+                              "fui-Toolbar",
+                              "___2ww75w0",
+                              "f22iagw",
+                              "f122n59",
+                              "f19jm9xf",
+                              "f1g8df6w"
+                             ],
+                             "role": "AXToolbar",
+                             "children": [
+                              {
+                               "role": "AXButton",
+                               "classes": [
+                                "fui-Button",
+                                "r1f29ykk",
+                                "___1eef5y1",
+                                "f1c21dwh",
+                                "f1p3nwhy",
+                                "f11589ue",
+                                "f1q5o8ev",
+                                "f1pdflbu",
+                                "f19n0e5",
+                                "f13joytk",
+                                "f1s2uweq",
+                                "fr80ssc",
+                                "f1ukrpxl",
+                                "fecsdlb",
+                                "f1exjfni",
+                                "f19vpps7",
+                                "fv5swzo",
+                                "fkoldzo",
+                                "fhvnf4x",
+                                "fb6swo4",
+                                "f1klyf7k",
+                                "f232fm2",
+                                "f1l983o9",
+                                "f1nhwcv0",
+                                "f1gm6xmp",
+                                "fxoo9op",
+                                "f1v3eptx",
+                                "f1i0gk12",
+                                "fd4bjan",
+                                "f1mk8lai",
+                                "ff9fk16",
+                                "f44c6la",
+                                "f1sw78cg",
+                                "fz311q0",
+                                "f1f1cz1w",
+                                "fvolr1"
+                               ],
+                               "title": "Encryption status",
+                               "desc": "Encryption status"
+                              },
+                              {
+                               "role": "AXStaticText",
+                               "value": "07:48"
+                              }
+                             ]
+                            },
+                            {
+                             "children": [
+                              {
+                               "desc": "Chat",
+                               "domId": "chat-button",
+                               "classes": [
+                                "fui-Button",
+                                "r1f29ykk",
+                                "___12h5j9i",
+                                "fhovq9v",
+                                "fkfq4zb",
+                                "f1t94bn6",
+                                "f1s2uweq",
+                                "fr80ssc",
+                                "f1ukrpxl",
+                                "fecsdlb",
+                                "fnwyq0v",
+                                "ft1hn21",
+                                "fuxngvv",
+                                "fy5bs14",
+                                "f1q1yqic",
+                                "fhvnf4x",
+                                "fb6swo4",
+                                "f1klyf7k",
+                                "f232fm2",
+                                "fwga7ee",
+                                "f1nhwcv0",
+                                "f1gm6xmp",
+                                "f1xxsver",
+                                "f1v3eptx",
+                                "fivsta0",
+                                "fd4bjan",
+                                "f3m6zum",
+                                "f1vx9l62",
+                                "f10pi13n",
+                                "f1gl81tg",
+                                "f1k467in",
+                                "fi4v1pz",
+                                "fvhlxh2",
+                                "fvsxh9f",
+                                "f1y3vp7e",
+                                "f1iwjod4",
+                                "f18um0k3",
+                                "fiy03ts",
+                                "f1ly5f7u",
+                                "f1mdlcz9",
+                                "f1hmm1st",
+                                "f1q3txrk",
+                                "f1k2l7mm",
+                                "fyxayw",
+                                "f1msd6ry",
+                                "f1rqtxy5",
+                                "f1hcleq7",
+                                "fj41rt3",
+                                "f1mk8lai",
+                                "f14z66ap",
+                                "f1m00log",
+                                "f1qklnrv",
+                                "f111wci8",
+                                "f8bsbmo",
+                                "f16u1re"
+                               ],
+                               "role": "AXButton",
+                               "title": "Chat"
+                              },
+                              {
+                               "role": "AXButton",
+                               "domId": "roster-button",
+                               "desc": "People",
+                               "title": "People",
+                               "classes": [
+                                "fui-Button",
+                                "r1f29ykk",
+                                "___12h5j9i",
+                                "fhovq9v",
+                                "fkfq4zb",
+                                "f1t94bn6",
+                                "f1s2uweq",
+                                "fr80ssc",
+                                "f1ukrpxl",
+                                "fecsdlb",
+                                "fnwyq0v",
+                                "ft1hn21",
+                                "fuxngvv",
+                                "fy5bs14",
+                                "f1q1yqic",
+                                "fhvnf4x",
+                                "fb6swo4",
+                                "f1klyf7k",
+                                "f232fm2",
+                                "fwga7ee",
+                                "f1nhwcv0",
+                                "f1gm6xmp",
+                                "f1xxsver",
+                                "f1v3eptx",
+                                "fivsta0",
+                                "fd4bjan",
+                                "f3m6zum",
+                                "f1vx9l62",
+                                "f10pi13n",
+                                "f1gl81tg",
+                                "f1k467in",
+                                "fi4v1pz",
+                                "fvhlxh2",
+                                "fvsxh9f",
+                                "f1y3vp7e",
+                                "f1iwjod4",
+                                "f18um0k3",
+                                "fiy03ts",
+                                "f1ly5f7u",
+                                "f1mdlcz9",
+                                "f1hmm1st",
+                                "f1q3txrk",
+                                "f1k2l7mm",
+                                "fyxayw",
+                                "f1msd6ry",
+                                "f1rqtxy5",
+                                "f1hcleq7",
+                                "fj41rt3",
+                                "f1mk8lai",
+                                "f14z66ap",
+                                "f1m00log",
+                                "f1qklnrv",
+                                "f111wci8",
+                                "f8bsbmo",
+                                "f16u1re"
+                               ]
+                              },
+                              {
+                               "role": "AXButton",
+                               "desc": "Raise",
+                               "domId": "raisehands-button",
+                               "classes": [
+                                "fui-Button",
+                                "r1f29ykk",
+                                "___12h5j9i",
+                                "fhovq9v",
+                                "fkfq4zb",
+                                "f1t94bn6",
+                                "f1s2uweq",
+                                "fr80ssc",
+                                "f1ukrpxl",
+                                "fecsdlb",
+                                "fnwyq0v",
+                                "ft1hn21",
+                                "fuxngvv",
+                                "fy5bs14",
+                                "f1q1yqic",
+                                "fhvnf4x",
+                                "fb6swo4",
+                                "f1klyf7k",
+                                "f232fm2",
+                                "fwga7ee",
+                                "f1nhwcv0",
+                                "f1gm6xmp",
+                                "f1xxsver",
+                                "f1v3eptx",
+                                "fivsta0",
+                                "fd4bjan",
+                                "f3m6zum",
+                                "f1vx9l62",
+                                "f10pi13n",
+                                "f1gl81tg",
+                                "f1k467in",
+                                "fi4v1pz",
+                                "fvhlxh2",
+                                "fvsxh9f",
+                                "f1y3vp7e",
+                                "f1iwjod4",
+                                "f18um0k3",
+                                "fiy03ts",
+                                "f1ly5f7u",
+                                "f1mdlcz9",
+                                "f1hmm1st",
+                                "f1q3txrk",
+                                "f1k2l7mm",
+                                "fyxayw",
+                                "f1msd6ry",
+                                "f1rqtxy5",
+                                "f1hcleq7",
+                                "fj41rt3",
+                                "f1mk8lai",
+                                "f14z66ap",
+                                "f1m00log",
+                                "f1qklnrv",
+                                "f111wci8",
+                                "f8bsbmo",
+                                "f16u1re"
+                               ],
+                               "title": "Raise"
+                              },
+                              {
+                               "desc": "React",
+                               "title": "React",
+                               "domId": "reactions-menu-button",
+                               "classes": [
+                                "fui-Button",
+                                "r1f29ykk",
+                                "___12h5j9i",
+                                "fhovq9v",
+                                "fkfq4zb",
+                                "f1t94bn6",
+                                "f1s2uweq",
+                                "fr80ssc",
+                                "f1ukrpxl",
+                                "fecsdlb",
+                                "fnwyq0v",
+                                "ft1hn21",
+                                "fuxngvv",
+                                "fy5bs14",
+                                "f1q1yqic",
+                                "fhvnf4x",
+                                "fb6swo4",
+                                "f1klyf7k",
+                                "f232fm2",
+                                "fwga7ee",
+                                "f1nhwcv0",
+                                "f1gm6xmp",
+                                "f1xxsver",
+                                "f1v3eptx",
+                                "fivsta0",
+                                "fd4bjan",
+                                "f3m6zum",
+                                "f1vx9l62",
+                                "f10pi13n",
+                                "f1gl81tg",
+                                "f1k467in",
+                                "fi4v1pz",
+                                "fvhlxh2",
+                                "fvsxh9f",
+                                "f1y3vp7e",
+                                "f1iwjod4",
+                                "f18um0k3",
+                                "fiy03ts",
+                                "f1ly5f7u",
+                                "f1mdlcz9",
+                                "f1hmm1st",
+                                "f1q3txrk",
+                                "f1k2l7mm",
+                                "fyxayw",
+                                "f1msd6ry",
+                                "f1rqtxy5",
+                                "f1hcleq7",
+                                "fj41rt3",
+                                "f1mk8lai",
+                                "f14z66ap",
+                                "f1m00log",
+                                "f1qklnrv",
+                                "f111wci8",
+                                "f8bsbmo",
+                                "f16u1re"
+                               ],
+                               "role": "AXButton"
+                              },
+                              {
+                               "classes": [
+                                "fui-Button",
+                                "r1f29ykk",
+                                "___12h5j9i",
+                                "fhovq9v",
+                                "fkfq4zb",
+                                "f1t94bn6",
+                                "f1s2uweq",
+                                "fr80ssc",
+                                "f1ukrpxl",
+                                "fecsdlb",
+                                "fnwyq0v",
+                                "ft1hn21",
+                                "fuxngvv",
+                                "fy5bs14",
+                                "f1q1yqic",
+                                "fhvnf4x",
+                                "fb6swo4",
+                                "f1klyf7k",
+                                "f232fm2",
+                                "fwga7ee",
+                                "f1nhwcv0",
+                                "f1gm6xmp",
+                                "f1xxsver",
+                                "f1v3eptx",
+                                "fivsta0",
+                                "fd4bjan",
+                                "f3m6zum",
+                                "f1vx9l62",
+                                "f10pi13n",
+                                "f1gl81tg",
+                                "f1k467in",
+                                "fi4v1pz",
+                                "fvhlxh2",
+                                "fvsxh9f",
+                                "f1y3vp7e",
+                                "f1iwjod4",
+                                "f18um0k3",
+                                "fiy03ts",
+                                "f1ly5f7u",
+                                "f1mdlcz9",
+                                "f1hmm1st",
+                                "f1q3txrk",
+                                "f1k2l7mm",
+                                "fyxayw",
+                                "f1msd6ry",
+                                "f1rqtxy5",
+                                "f1hcleq7",
+                                "fj41rt3",
+                                "f1mk8lai",
+                                "f14z66ap",
+                                "f1m00log",
+                                "f1qklnrv",
+                                "f111wci8",
+                                "f8bsbmo",
+                                "f16u1re"
+                               ],
+                               "domId": "custom-view-button",
+                               "desc": "View",
+                               "title": "View",
+                               "role": "AXPopUpButton"
+                              },
+                              {
+                               "classes": [
+                                "fui-Button",
+                                "r1f29ykk",
+                                "___12h5j9i",
+                                "fhovq9v",
+                                "fkfq4zb",
+                                "f1t94bn6",
+                                "f1s2uweq",
+                                "fr80ssc",
+                                "f1ukrpxl",
+                                "fecsdlb",
+                                "fnwyq0v",
+                                "ft1hn21",
+                                "fuxngvv",
+                                "fy5bs14",
+                                "f1q1yqic",
+                                "fhvnf4x",
+                                "fb6swo4",
+                                "f1klyf7k",
+                                "f232fm2",
+                                "fwga7ee",
+                                "f1nhwcv0",
+                                "f1gm6xmp",
+                                "f1xxsver",
+                                "f1v3eptx",
+                                "fivsta0",
+                                "fd4bjan",
+                                "f3m6zum",
+                                "f1vx9l62",
+                                "f10pi13n",
+                                "f1gl81tg",
+                                "f1k467in",
+                                "fi4v1pz",
+                                "fvhlxh2",
+                                "fvsxh9f",
+                                "f1y3vp7e",
+                                "f1iwjod4",
+                                "f18um0k3",
+                                "fiy03ts",
+                                "f1ly5f7u",
+                                "f1mdlcz9",
+                                "f1hmm1st",
+                                "f1q3txrk",
+                                "f1k2l7mm",
+                                "fyxayw",
+                                "f1msd6ry",
+                                "f1rqtxy5",
+                                "f1hcleq7",
+                                "fj41rt3",
+                                "f1mk8lai",
+                                "f14z66ap",
+                                "f1m00log",
+                                "f1qklnrv",
+                                "f111wci8",
+                                "f8bsbmo",
+                                "f16u1re"
+                               ],
+                               "desc": "More",
+                               "domId": "callingButtons-showMoreBtn",
+                               "title": "More",
+                               "role": "AXPopUpButton"
+                              },
+                              {
+                               "classes": [
+                                "fui-Divider",
+                                "___31yy7w0",
+                                "f22iagw",
+                                "f1lwjmbk",
+                                "f1mk8lai",
+                                "f122n59",
+                                "f1ewtqcl",
+                                "f1vx9l62",
+                                "fqerorx",
+                                "f10pi13n",
+                                "fk6fouc",
+                                "fy9rknc",
+                                "figsok6",
+                                "fwrc4pm",
+                                "f17mccla",
+                                "fyl8oag",
+                                "f16vkdww",
+                                "fhsnbul",
+                                "f1gw3sf2",
+                                "f1ly5f7u",
+                                "f1s3tz6t",
+                                "f1wl9k8s",
+                                "f13zj6fq",
+                                "fkfq4zb",
+                                "f1vccso1",
+                                "f1geml7w",
+                                "f1r7kh1m",
+                                "fjml6kk",
+                                "f16j7guv",
+                                "fx01ahm",
+                                "fl8d8yv",
+                                "fj1a37q",
+                                "f16gbxbe",
+                                "f1yq6w5o",
+                                "f9sc749",
+                                "fhkwbjy",
+                                "flthirb",
+                                "f13hvwk3",
+                                "f19onpk6",
+                                "f1kyqvp9",
+                                "fesgyo",
+                                "fzynn9s",
+                                "fekrn8e",
+                                "f9y3bi5",
+                                "fkb7v5e",
+                                "f1sw78cg"
+                               ],
+                               "role": "AXSplitter",
+                               "domId": "main-divider"
+                              },
+                              {
+                               "role": "AXGroup",
+                               "children": [
+                                {
+                                 "classes": [
+                                  "fui-Button",
+                                  "r1f29ykk",
+                                  "___1m4989k",
+                                  "fhovq9v",
+                                  "f19n0e5",
+                                  "f1t94bn6",
+                                  "f1s2uweq",
+                                  "fr80ssc",
+                                  "f1ukrpxl",
+                                  "fecsdlb",
+                                  "fnwyq0v",
+                                  "ft1hn21",
+                                  "fuxngvv",
+                                  "fy5bs14",
+                                  "f1q1yqic",
+                                  "fhvnf4x",
+                                  "fb6swo4",
+                                  "f1klyf7k",
+                                  "f232fm2",
+                                  "fwga7ee",
+                                  "f1nhwcv0",
+                                  "f1gm6xmp",
+                                  "f1xxsver",
+                                  "f1v3eptx",
+                                  "fivsta0",
+                                  "fd4bjan",
+                                  "f3m6zum",
+                                  "f1vx9l62",
+                                  "f10pi13n",
+                                  "f1gl81tg",
+                                  "f1k467in",
+                                  "fi4v1pz",
+                                  "fvhlxh2",
+                                  "fvsxh9f",
+                                  "f1y3vp7e",
+                                  "f1iwjod4",
+                                  "f18um0k3",
+                                  "fiy03ts",
+                                  "f1ly5f7u",
+                                  "f1mdlcz9",
+                                  "f1hmm1st",
+                                  "f1q3txrk",
+                                  "f1k2l7mm",
+                                  "fyxayw",
+                                  "f1msd6ry",
+                                  "f11qmguv",
+                                  "f1rqtxy5",
+                                  "f1hcleq7",
+                                  "fj41rt3",
+                                  "f1mk8lai",
+                                  "f14z66ap",
+                                  "f1m00log",
+                                  "f1qklnrv",
+                                  "f111wci8"
+                                 ],
+                                 "domId": "video-button",
+                                 "title": "Turn camera off",
+                                 "role": "AXButton",
+                                 "desc": "Turn camera off"
+                                },
+                                {
+                                 "role": "AXButton",
+                                 "classes": [
+                                  "fui-Button",
+                                  "r1f29ykk",
+                                  "fui-MenuButton",
+                                  "___1db8img",
+                                  "fxugw4r",
+                                  "f1p3nwhy",
+                                  "f11589ue",
+                                  "f1q5o8ev",
+                                  "f1pdflbu",
+                                  "f19n0e5",
+                                  "fjxutwb",
+                                  "f1s2uweq",
+                                  "fr80ssc",
+                                  "f1ukrpxl",
+                                  "fecsdlb",
+                                  "f139oj5f",
+                                  "ft1hn21",
+                                  "fuxngvv",
+                                  "fkoldzo",
+                                  "fhvnf4x",
+                                  "fb6swo4",
+                                  "f1klyf7k",
+                                  "f232fm2",
+                                  "f1l983o9",
+                                  "f1nhwcv0",
+                                  "f1gm6xmp",
+                                  "fxoo9op",
+                                  "f1v3eptx",
+                                  "f1i0gk12",
+                                  "fd4bjan",
+                                  "fag2o0",
+                                  "f1mk8lai",
+                                  "ft85np5",
+                                  "fod5ikn",
+                                  "fl43uef",
+                                  "faaz57k",
+                                  "f1b6alqh",
+                                  "fjy1crr",
+                                  "f1t7lupt",
+                                  "f1cqwcg4",
+                                  "f1mcc0hb",
+                                  "f11ysow2",
+                                  "fk8v0rs",
+                                  "f1s7o6v4"
+                                 ],
+                                 "domId": "video-button-configure"
+                                }
+                               ],
+                               "classes": [
+                                "fui-SplitButton",
+                                "___tnby060",
+                                "ftuwxu6",
+                                "fsxf2b5",
+                                "f10pi13n",
+                                "fmrv4ls",
+                                "f14uur2j",
+                                "fye5tvs",
+                                "f1e8brtx",
+                                "fxp12j1",
+                                "fr7y8no",
+                                "f1b65x5h",
+                                "f16kf41h",
+                                "ffl6mx9",
+                                "f1mww3cx",
+                                "f1s184ao"
+                               ]
+                              },
+                              {
+                               "role": "AXGroup",
+                               "classes": [
+                                "fui-SplitButton",
+                                "___tnby060",
+                                "ftuwxu6",
+                                "fsxf2b5",
+                                "f10pi13n",
+                                "fmrv4ls",
+                                "f14uur2j",
+                                "fye5tvs",
+                                "f1e8brtx",
+                                "fxp12j1",
+                                "fr7y8no",
+                                "f1b65x5h",
+                                "f16kf41h",
+                                "ffl6mx9",
+                                "f1mww3cx",
+                                "f1s184ao"
+                               ],
+                               "children": [
+                                {
+                                 "classes": [
+                                  "fui-Button",
+                                  "r1f29ykk",
+                                  "___1m4989k",
+                                  "fhovq9v",
+                                  "f19n0e5",
+                                  "f1t94bn6",
+                                  "f1s2uweq",
+                                  "fr80ssc",
+                                  "f1ukrpxl",
+                                  "fecsdlb",
+                                  "fnwyq0v",
+                                  "ft1hn21",
+                                  "fuxngvv",
+                                  "fy5bs14",
+                                  "f1q1yqic",
+                                  "fhvnf4x",
+                                  "fb6swo4",
+                                  "f1klyf7k",
+                                  "f232fm2",
+                                  "fwga7ee",
+                                  "f1nhwcv0",
+                                  "f1gm6xmp",
+                                  "f1xxsver",
+                                  "f1v3eptx",
+                                  "fivsta0",
+                                  "fd4bjan",
+                                  "f3m6zum",
+                                  "f1vx9l62",
+                                  "f10pi13n",
+                                  "f1gl81tg",
+                                  "f1k467in",
+                                  "fi4v1pz",
+                                  "fvhlxh2",
+                                  "fvsxh9f",
+                                  "f1y3vp7e",
+                                  "f1iwjod4",
+                                  "f18um0k3",
+                                  "fiy03ts",
+                                  "f1ly5f7u",
+                                  "f1mdlcz9",
+                                  "f1hmm1st",
+                                  "f1q3txrk",
+                                  "f1k2l7mm",
+                                  "fyxayw",
+                                  "f1msd6ry",
+                                  "f11qmguv",
+                                  "f1rqtxy5",
+                                  "f1hcleq7",
+                                  "fj41rt3",
+                                  "f1mk8lai",
+                                  "f14z66ap",
+                                  "f1m00log",
+                                  "f1qklnrv",
+                                  "f111wci8"
+                                 ],
+                                 "desc": "Mute mic",
+                                 "title": "Mute mic",
+                                 "domId": "mic-button",
+                                 "role": "AXButton"
+                                },
+                                {
+                                 "domId": "audio-button-configure",
+                                 "role": "AXButton",
+                                 "classes": [
+                                  "fui-Button",
+                                  "r1f29ykk",
+                                  "fui-MenuButton",
+                                  "___1db8img",
+                                  "fxugw4r",
+                                  "f1p3nwhy",
+                                  "f11589ue",
+                                  "f1q5o8ev",
+                                  "f1pdflbu",
+                                  "f19n0e5",
+                                  "fjxutwb",
+                                  "f1s2uweq",
+                                  "fr80ssc",
+                                  "f1ukrpxl",
+                                  "fecsdlb",
+                                  "f139oj5f",
+                                  "ft1hn21",
+                                  "fuxngvv",
+                                  "fkoldzo",
+                                  "fhvnf4x",
+                                  "fb6swo4",
+                                  "f1klyf7k",
+                                  "f232fm2",
+                                  "f1l983o9",
+                                  "f1nhwcv0",
+                                  "f1gm6xmp",
+                                  "fxoo9op",
+                                  "f1v3eptx",
+                                  "f1i0gk12",
+                                  "fd4bjan",
+                                  "fag2o0",
+                                  "f1mk8lai",
+                                  "ft85np5",
+                                  "fod5ikn",
+                                  "fl43uef",
+                                  "faaz57k",
+                                  "f1b6alqh",
+                                  "fjy1crr",
+                                  "f1t7lupt",
+                                  "f1cqwcg4",
+                                  "f1mcc0hb",
+                                  "f11ysow2",
+                                  "fk8v0rs",
+                                  "f1s7o6v4"
+                                 ]
+                                }
+                               ]
+                              },
+                              {
+                               "role": "AXButton",
+                               "desc": "Share",
+                               "domId": "screenshare-button",
+                               "title": "Share",
+                               "classes": [
+                                "fui-Button",
+                                "r1f29ykk",
+                                "___14lgyxq",
+                                "fhovq9v",
+                                "f19n0e5",
+                                "f1t94bn6",
+                                "f1s2uweq",
+                                "fr80ssc",
+                                "f1ukrpxl",
+                                "fecsdlb",
+                                "fnwyq0v",
+                                "ft1hn21",
+                                "fuxngvv",
+                                "fy5bs14",
+                                "f1q1yqic",
+                                "fhvnf4x",
+                                "fb6swo4",
+                                "f1klyf7k",
+                                "f232fm2",
+                                "fwga7ee",
+                                "f1nhwcv0",
+                                "f1gm6xmp",
+                                "f1xxsver",
+                                "f1v3eptx",
+                                "fivsta0",
+                                "fd4bjan",
+                                "f3m6zum",
+                                "f1vx9l62",
+                                "f10pi13n",
+                                "f1gl81tg",
+                                "f1k467in",
+                                "fi4v1pz",
+                                "fvhlxh2",
+                                "fvsxh9f",
+                                "f1y3vp7e",
+                                "f1iwjod4",
+                                "f18um0k3",
+                                "fiy03ts",
+                                "f1ly5f7u",
+                                "f1mdlcz9",
+                                "f1hmm1st",
+                                "f1q3txrk",
+                                "f1k2l7mm",
+                                "fyxayw",
+                                "f1msd6ry",
+                                "f1rqtxy5",
+                                "f1hcleq7",
+                                "fj41rt3",
+                                "f1mk8lai",
+                                "f14z66ap",
+                                "f1m00log",
+                                "f1qklnrv",
+                                "f111wci8"
+                               ]
+                              },
+                              {
+                               "role": "AXButton",
+                               "title": "Leave",
+                               "domId": "hangup-button",
+                               "classes": [
+                                "fui-Button",
+                                "r1f29ykk",
+                                "___4qlfd90",
+                                "fdl5y0r",
+                                "fmysjtr",
+                                "f5k7jbu",
+                                "f1s2uweq",
+                                "fr80ssc",
+                                "f1ukrpxl",
+                                "fecsdlb",
+                                "f90urxq",
+                                "ft1hn21",
+                                "fuxngvv",
+                                "f1iot3np",
+                                "f1q1yqic",
+                                "fhvnf4x",
+                                "fb6swo4",
+                                "f1klyf7k",
+                                "f232fm2",
+                                "fwga7ee",
+                                "f1nhwcv0",
+                                "f1gm6xmp",
+                                "f1xxsver",
+                                "f1v3eptx",
+                                "fivsta0",
+                                "fd4bjan",
+                                "f3m6zum",
+                                "fhuq1gn",
+                                "fmpw5z7",
+                                "fyxfkj9",
+                                "ff3glw6",
+                                "f1mfc07z",
+                                "f1k6fduh",
+                                "f7rmrga",
+                                "fwdb8un",
+                                "fqlojj1",
+                                "f1sw78cg"
+                               ]
+                              }
+                             ],
+                             "role": "AXToolbar",
+                             "classes": [
+                              "fui-Toolbar",
+                              "___56tqxz0",
+                              "f22iagw",
+                              "f122n59",
+                              "f1yqiaad"
+                             ]
+                            }
+                           ]
+                          },
+                          {
+                           "role": "AXGroup",
+                           "children": [
+                            {
+                             "children": [
+                              {
+                               "classes": [
+                                "fui-Flex",
+                                "___p2lnz80",
+                                "f22iagw",
+                                "f1vx9l62",
+                                "f1ktbn1t",
+                                "f3ev47i",
+                                "fpjto39",
+                                "f1euv43f",
+                                "ffvuocu",
+                                "fdhnlf0",
+                                "f8c585h"
+                               ],
+                               "subrole": "AXEmptyGroup",
+                               "role": "AXGroup"
+                              }
+                             ],
+                             "subrole": "AXEmptyGroup",
+                             "role": "AXGroup",
+                             "classes": [
+                              "___1y0zmn8",
+                              "f1euv43f",
+                              "f1ktbn1t"
+                             ]
+                            },
+                            {
+                             "role": "AXGroup",
+                             "children": [
+                              {
+                               "subrole": "AXLandmarkMain",
+                               "classes": [
+                                "fui-Flex",
+                                "___1o5nuec",
+                                "f22iagw",
+                                "fly5x3f",
+                                "f1l02sjl",
+                                "f1jhi6b8",
+                                "f1a3p1vp",
+                                "f1ngn1p8"
+                               ],
+                               "title": "Shared content view",
+                               "desc": "Shared content view",
+                               "role": "AXGroup",
+                               "children": [
+                                {
+                                 "children": [
+                                  {
+                                   "classes": [
+                                    "fui-Primitive",
+                                    "___11fez77",
+                                    "fly5x3f",
+                                    "f1l02sjl",
+                                    "f1a3p1vp",
+                                    "f10pi13n"
+                                   ],
+                                   "children": [
+                                    {
+                                     "role": "AXGroup",
+                                     "classes": [
+                                      "fui-Primitive",
+                                      "___t6nqfm0",
+                                      "f15twtuk",
+                                      "f1vgc2s3",
+                                      "fly5x3f",
+                                      "f1l02sjl"
+                                     ],
+                                     "children": [
+                                      {
+                                       "role": "AXGroup",
+                                       "classes": [
+                                        "fui-Primitive"
+                                       ],
+                                       "children": [
+                                        {
+                                         "children": [
+                                          {
+                                           "children": [
+                                            {
+                                             "children": [
+                                              {
+                                               "classes": [
+                                                "___100chc6",
+                                                "fly5x3f",
+                                                "f1l02sjl"
+                                               ],
+                                               "children": [
+                                                {
+                                                 "role": "AXGroup",
+                                                 "subrole": "AXEmptyGroup"
+                                                }
+                                               ],
+                                               "domId": "video-stream-renderer-wrapper",
+                                               "subrole": "AXEmptyGroup",
+                                               "role": "AXGroup"
+                                              },
+                                              {
+                                               "children": [
+                                                {
+                                                 "classes": [
+                                                  "___12zni01",
+                                                  "f1cmbuwj",
+                                                  "fv6wr3j",
+                                                  "fz5stix",
+                                                  "f1p9o1ba"
+                                                 ],
+                                                 "role": "AXGroup",
+                                                 "children": [
+                                                  {
+                                                   "value": "Jordan Avery",
+                                                   "role": "AXStaticText"
+                                                  }
+                                                 ]
+                                                }
+                                               ],
+                                               "role": "AXGroup",
+                                               "classes": [
+                                                "___yzkp4d0",
+                                                "f22iagw",
+                                                "f1euv43f",
+                                                "f17q6i6r",
+                                                "f1clrtn",
+                                                "f1k120tj",
+                                                "fndd16v",
+                                                "fonrgv7",
+                                                "f3wpdtb",
+                                                "f1bhin6j",
+                                                "f1ugzwwg",
+                                                "f8uprrt",
+                                                "fmpw5z7",
+                                                "f19g0ac",
+                                                "f2gahj",
+                                                "ft85np5",
+                                                "fc5wo7j",
+                                                "f122n59"
+                                               ]
+                                              },
+                                              {
+                                               "role": "AXGroup",
+                                               "subrole": "AXEmptyGroup",
+                                               "classes": [
+                                                "fui-Primitive",
+                                                "___1srn2lf",
+                                                "f19g0ac",
+                                                "f1euv43f",
+                                                "f22iagw",
+                                                "f1063pyq",
+                                                "f122n59",
+                                                "f1v1h99f",
+                                                "f1ih7jgx",
+                                                "faqewft",
+                                                "fy77jfu",
+                                                "f1ih1lh9",
+                                                "fqrr6er"
+                                               ]
+                                              }
+                                             ],
+                                             "role": "AXGroup",
+                                             "classes": [
+                                              "___im5izo0",
+                                              "f1ovgixi",
+                                              "ftseu5r",
+                                              "f138vucn",
+                                              "fly5x3f",
+                                              "f1l02sjl",
+                                              "f10pi13n",
+                                              "fawwh7m",
+                                              "f1a3p1vp",
+                                              "fxs2cps",
+                                              "f1aehjj5"
+                                             ]
+                                            }
+                                           ],
+                                           "role": "AXGroup",
+                                           "classes": [
+                                            "___100chc6",
+                                            "fly5x3f",
+                                            "f1l02sjl"
+                                           ]
+                                          }
+                                         ],
+                                         "title": "Jordan Avery",
+                                         "classes": [
+                                          "___33svdl0",
+                                          "f1euv43f",
+                                          "ftuwxu6",
+                                          "f4d9j23",
+                                          "f122n59",
+                                          "f1izfyrr",
+                                          "f1immsc2",
+                                          "fqtknz5",
+                                          "fly5x3f",
+                                          "f1l02sjl"
+                                         ],
+                                         "role": "AXMenuItem"
+                                        },
+                                        {
+                                         "children": [
+                                          {
+                                           "role": "AXGroup",
+                                           "classes": [
+                                            "___100chc6",
+                                            "fly5x3f",
+                                            "f1l02sjl"
+                                           ],
+                                           "children": [
+                                            {
+                                             "classes": [
+                                              "___16utjvt",
+                                              "f1ovgixi",
+                                              "ftseu5r",
+                                              "f138vucn",
+                                              "fly5x3f",
+                                              "f1l02sjl",
+                                              "f10pi13n",
+                                              "fawwh7m",
+                                              "f1a3p1vp",
+                                              "f1aehjj5"
+                                             ],
+                                             "children": [
+                                              {
+                                               "domId": "video-stream-renderer-wrapper",
+                                               "subrole": "AXEmptyGroup",
+                                               "children": [
+                                                {
+                                                 "role": "AXGroup",
+                                                 "subrole": "AXEmptyGroup"
+                                                }
+                                               ],
+                                               "classes": [
+                                                "___100chc6",
+                                                "fly5x3f",
+                                                "f1l02sjl"
+                                               ],
+                                               "role": "AXGroup"
+                                              },
+                                              {
+                                               "subrole": "AXEmptyGroup",
+                                               "role": "AXGroup",
+                                               "classes": [
+                                                "fui-Flex",
+                                                "___1ikhnuj",
+                                                "f22iagw",
+                                                "f1l02sjl",
+                                                "f1vgc2s3",
+                                                "f1aehjj5",
+                                                "f1euv43f",
+                                                "f15twtuk",
+                                                "fly5x3f",
+                                                "f1bm94ky",
+                                                "f1d5gnq4",
+                                                "f99sooz",
+                                                "fxv2tmp",
+                                                "f110m991",
+                                                "f1t0u0az",
+                                                "f1429bq1",
+                                                "fxf9f1y",
+                                                "f14oqhab",
+                                                "f180phum",
+                                                "fbelese",
+                                                "f1rk4iek",
+                                                "f32tjj0",
+                                                "f1ijlm3k",
+                                                "f1xmmf4e",
+                                                "f1ypk20h",
+                                                "fcfs8jc",
+                                                "f396wnx",
+                                                "f1ld0wy9",
+                                                "fltdm11",
+                                                "f77y9vx",
+                                                "f11cqp5e",
+                                                "f10ld6dp",
+                                                "f1mdyvut",
+                                                "f2df6js",
+                                                "fb7rcn1",
+                                                "f1bniufk",
+                                                "f1884sgo",
+                                                "f9pox2d",
+                                                "f11ef69",
+                                                "f1ac6l4y",
+                                                "fs357bs"
+                                               ]
+                                              },
+                                              {
+                                               "classes": [
+                                                "fui-Flex",
+                                                "___1ikhnuj",
+                                                "f22iagw",
+                                                "f1l02sjl",
+                                                "f1vgc2s3",
+                                                "f1aehjj5",
+                                                "f1euv43f",
+                                                "f15twtuk",
+                                                "fly5x3f",
+                                                "f1bm94ky",
+                                                "f1d5gnq4",
+                                                "f99sooz",
+                                                "fxv2tmp",
+                                                "f110m991",
+                                                "f1t0u0az",
+                                                "f1429bq1",
+                                                "fxf9f1y",
+                                                "f14oqhab",
+                                                "f180phum",
+                                                "fbelese",
+                                                "f1rk4iek",
+                                                "f32tjj0",
+                                                "f1ijlm3k",
+                                                "f1xmmf4e",
+                                                "f1ypk20h",
+                                                "fcfs8jc",
+                                                "f396wnx",
+                                                "f1ld0wy9",
+                                                "fltdm11",
+                                                "f77y9vx",
+                                                "f11cqp5e",
+                                                "f10ld6dp",
+                                                "f1mdyvut",
+                                                "f2df6js",
+                                                "fb7rcn1",
+                                                "f1bniufk",
+                                                "f1884sgo",
+                                                "f9pox2d",
+                                                "f11ef69",
+                                                "f1ac6l4y",
+                                                "fs357bs"
+                                               ],
+                                               "role": "AXGroup",
+                                               "subrole": "AXEmptyGroup"
+                                              },
+                                              {
+                                               "classes": [
+                                                "___yzkp4d0",
+                                                "f22iagw",
+                                                "f1euv43f",
+                                                "f17q6i6r",
+                                                "f1clrtn",
+                                                "f1k120tj",
+                                                "fndd16v",
+                                                "fonrgv7",
+                                                "f3wpdtb",
+                                                "f1bhin6j",
+                                                "f1ugzwwg",
+                                                "f8uprrt",
+                                                "fmpw5z7",
+                                                "f19g0ac",
+                                                "f2gahj",
+                                                "ft85np5",
+                                                "fc5wo7j",
+                                                "f122n59"
+                                               ],
+                                               "children": [
+                                                {
+                                                 "classes": [
+                                                  "___12zni01",
+                                                  "f1cmbuwj",
+                                                  "fv6wr3j",
+                                                  "fz5stix",
+                                                  "f1p9o1ba"
+                                                 ],
+                                                 "role": "AXGroup",
+                                                 "children": [
+                                                  {
+                                                   "role": "AXStaticText",
+                                                   "value": "Sam Okafor"
+                                                  }
+                                                 ]
+                                                }
+                                               ],
+                                               "role": "AXGroup"
+                                              },
+                                              {
+                                               "classes": [
+                                                "fui-Primitive",
+                                                "___1srn2lf",
+                                                "f19g0ac",
+                                                "f1euv43f",
+                                                "f22iagw",
+                                                "f1063pyq",
+                                                "f122n59",
+                                                "f1v1h99f",
+                                                "f1ih7jgx",
+                                                "faqewft",
+                                                "fy77jfu",
+                                                "f1ih1lh9",
+                                                "fqrr6er"
+                                               ],
+                                               "subrole": "AXEmptyGroup",
+                                               "role": "AXGroup"
+                                              }
+                                             ],
+                                             "role": "AXGroup"
+                                            }
+                                           ]
+                                          }
+                                         ],
+                                         "role": "AXMenuItem",
+                                         "title": "Sam Okafor",
+                                         "classes": [
+                                          "___1504rl1",
+                                          "f1euv43f",
+                                          "ftuwxu6",
+                                          "f4d9j23",
+                                          "f122n59",
+                                          "f1izfyrr",
+                                          "f1immsc2",
+                                          "fqtknz5"
+                                         ]
+                                        },
+                                        {
+                                         "role": "AXMenuItem",
+                                         "title": "Riley Chen Unverified",
+                                         "classes": [
+                                          "___1504rl1",
+                                          "f1euv43f",
+                                          "ftuwxu6",
+                                          "f4d9j23",
+                                          "f122n59",
+                                          "f1izfyrr",
+                                          "f1immsc2",
+                                          "fqtknz5"
+                                         ],
+                                         "children": [
+                                          {
+                                           "children": [
+                                            {
+                                             "role": "AXGroup",
+                                             "classes": [
+                                              "___16utjvt",
+                                              "f1ovgixi",
+                                              "ftseu5r",
+                                              "f138vucn",
+                                              "fly5x3f",
+                                              "f1l02sjl",
+                                              "f10pi13n",
+                                              "fawwh7m",
+                                              "f1a3p1vp",
+                                              "f1aehjj5"
+                                             ],
+                                             "children": [
+                                              {
+                                               "children": [
+                                                {
+                                                 "role": "AXGroup",
+                                                 "subrole": "AXEmptyGroup"
+                                                }
+                                               ],
+                                               "domId": "video-stream-renderer-wrapper",
+                                               "classes": [
+                                                "___100chc6",
+                                                "fly5x3f",
+                                                "f1l02sjl"
+                                               ],
+                                               "role": "AXGroup",
+                                               "subrole": "AXEmptyGroup"
+                                              },
+                                              {
+                                               "subrole": "AXEmptyGroup",
+                                               "classes": [
+                                                "fui-Flex",
+                                                "___1ikhnuj",
+                                                "f22iagw",
+                                                "f1l02sjl",
+                                                "f1vgc2s3",
+                                                "f1aehjj5",
+                                                "f1euv43f",
+                                                "f15twtuk",
+                                                "fly5x3f",
+                                                "f1bm94ky",
+                                                "f1d5gnq4",
+                                                "f99sooz",
+                                                "fxv2tmp",
+                                                "f110m991",
+                                                "f1t0u0az",
+                                                "f1429bq1",
+                                                "fxf9f1y",
+                                                "f14oqhab",
+                                                "f180phum",
+                                                "fbelese",
+                                                "f1rk4iek",
+                                                "f32tjj0",
+                                                "f1ijlm3k",
+                                                "f1xmmf4e",
+                                                "f1ypk20h",
+                                                "fcfs8jc",
+                                                "f396wnx",
+                                                "f1ld0wy9",
+                                                "fltdm11",
+                                                "f77y9vx",
+                                                "f11cqp5e",
+                                                "f10ld6dp",
+                                                "f1mdyvut",
+                                                "f2df6js",
+                                                "fb7rcn1",
+                                                "f1bniufk",
+                                                "f1884sgo",
+                                                "f9pox2d",
+                                                "f11ef69",
+                                                "f1ac6l4y",
+                                                "fs357bs"
+                                               ],
+                                               "role": "AXGroup"
+                                              },
+                                              {
+                                               "subrole": "AXEmptyGroup",
+                                               "classes": [
+                                                "fui-Flex",
+                                                "___1ikhnuj",
+                                                "f22iagw",
+                                                "f1l02sjl",
+                                                "f1vgc2s3",
+                                                "f1aehjj5",
+                                                "f1euv43f",
+                                                "f15twtuk",
+                                                "fly5x3f",
+                                                "f1bm94ky",
+                                                "f1d5gnq4",
+                                                "f99sooz",
+                                                "fxv2tmp",
+                                                "f110m991",
+                                                "f1t0u0az",
+                                                "f1429bq1",
+                                                "fxf9f1y",
+                                                "f14oqhab",
+                                                "f180phum",
+                                                "fbelese",
+                                                "f1rk4iek",
+                                                "f32tjj0",
+                                                "f1ijlm3k",
+                                                "f1xmmf4e",
+                                                "f1ypk20h",
+                                                "fcfs8jc",
+                                                "f396wnx",
+                                                "f1ld0wy9",
+                                                "fltdm11",
+                                                "f77y9vx",
+                                                "f11cqp5e",
+                                                "f10ld6dp",
+                                                "f1mdyvut",
+                                                "f2df6js",
+                                                "fb7rcn1",
+                                                "f1bniufk",
+                                                "f1884sgo",
+                                                "f9pox2d",
+                                                "f11ef69",
+                                                "f1ac6l4y",
+                                                "fs357bs"
+                                               ],
+                                               "role": "AXGroup"
+                                              },
+                                              {
+                                               "children": [
+                                                {
+                                                 "role": "AXGroup",
+                                                 "classes": [
+                                                  "___12zni01",
+                                                  "f1cmbuwj",
+                                                  "fv6wr3j",
+                                                  "fz5stix",
+                                                  "f1p9o1ba"
+                                                 ],
+                                                 "children": [
+                                                  {
+                                                   "value": "Riley Chen",
+                                                   "role": "AXStaticText"
+                                                  }
+                                                 ]
+                                                },
+                                                {
+                                                 "desc": "Unverified",
+                                                 "role": "AXGroup",
+                                                 "subrole": "AXEmptyGroup",
+                                                 "title": "Unverified",
+                                                 "classes": [
+                                                  "fui-Flex",
+                                                  "___uyz8px0",
+                                                  "ftuwxu6",
+                                                  "f17mccla",
+                                                  "f4l2907",
+                                                  "fjf1xye",
+                                                  "fjw5fx7",
+                                                  "fd461yt"
+                                                 ]
+                                                }
+                                               ],
+                                               "classes": [
+                                                "___yzkp4d0",
+                                                "f22iagw",
+                                                "f1euv43f",
+                                                "f17q6i6r",
+                                                "f1clrtn",
+                                                "f1k120tj",
+                                                "fndd16v",
+                                                "fonrgv7",
+                                                "f3wpdtb",
+                                                "f1bhin6j",
+                                                "f1ugzwwg",
+                                                "f8uprrt",
+                                                "fmpw5z7",
+                                                "f19g0ac",
+                                                "f2gahj",
+                                                "ft85np5",
+                                                "fc5wo7j",
+                                                "f122n59"
+                                               ],
+                                               "role": "AXGroup"
+                                              },
+                                              {
+                                               "subrole": "AXEmptyGroup",
+                                               "classes": [
+                                                "fui-Primitive",
+                                                "___1srn2lf",
+                                                "f19g0ac",
+                                                "f1euv43f",
+                                                "f22iagw",
+                                                "f1063pyq",
+                                                "f122n59",
+                                                "f1v1h99f",
+                                                "f1ih7jgx",
+                                                "faqewft",
+                                                "fy77jfu",
+                                                "f1ih1lh9",
+                                                "fqrr6er"
+                                               ],
+                                               "role": "AXGroup"
+                                              }
+                                             ]
+                                            }
+                                           ],
+                                           "role": "AXGroup",
+                                           "classes": [
+                                            "___100chc6",
+                                            "fly5x3f",
+                                            "f1l02sjl"
+                                           ]
+                                          }
+                                         ]
+                                        }
+                                       ]
+                                      }
+                                     ]
+                                    }
+                                   ],
+                                   "role": "AXGroup"
+                                  }
+                                 ],
+                                 "role": "AXGroup",
+                                 "classes": [
+                                  "fui-Flex",
+                                  "___snveh70",
+                                  "f22iagw",
+                                  "fbhxue7",
+                                  "f6jr5hl",
+                                  "f10pi13n"
+                                 ]
+                                }
+                               ]
+                              }
+                             ],
+                             "classes": [
+                              "___77lcry0",
+                              "f10pi13n"
+                             ]
+                            }
+                           ],
+                           "classes": [
+                            "___1gxw3i3",
+                            "f10pi13n",
+                            "f22iagw",
+                            "f1063pyq",
+                            "f1l02sjl"
+                           ]
+                          }
+                         ],
+                         "role": "AXGroup",
+                         "classes": [
+                          "___18gxwca",
+                          "f22iagw",
+                          "f1vx9l62",
+                          "f10pi13n",
+                          "f1l02sjl",
+                          "fly5x3f",
+                          "fdkaboo"
+                         ]
+                        }
+                       ],
+                       "role": "AXGroup",
+                       "domId": "root"
+                      },
+                      {
+                       "role": "AXGroup",
+                       "subrole": "AXEmptyGroup"
+                      },
+                      {
+                       "role": "AXGroup",
+                       "subrole": "AXEmptyGroup"
+                      },
+                      {
+                       "classes": [
+                        "fui-FluentProviderr1",
+                        "fui-FluentProvider",
+                        "fui-FluentProviderr0",
+                        "r1uy2qi7",
+                        "___4mw8x90",
+                        "f19n0e5",
+                        "f3rmtva",
+                        "f1o700av",
+                        "fk6fouc",
+                        "fkhj508",
+                        "figsok6",
+                        "f8497fr",
+                        "fw9d4ui",
+                        "funnff6",
+                        "f1n2bkgp",
+                        "fyxyu0g",
+                        "f5fudq1",
+                        "f1cr0ken",
+                        "fztekkr",
+                        "f128riiv",
+                        "f12w5dms",
+                        "f1s4t3tb",
+                        "f19h6rng",
+                        "fyns6bt",
+                        "f1euv43f",
+                        "f15twtuk",
+                        "f1vgc2s3",
+                        "f1e31b4d",
+                        "fn14dot"
+                       ],
+                       "subrole": "AXEmptyGroup",
+                       "role": "AXGroup"
+                      },
+                      {
+                       "classes": [
+                        "fui-FluentProviderr1",
+                        "fui-FluentProvider",
+                        "fui-FluentProviderr0",
+                        "r1uy2qi7",
+                        "___4mw8x90",
+                        "f19n0e5",
+                        "f3rmtva",
+                        "f1o700av",
+                        "fk6fouc",
+                        "fkhj508",
+                        "figsok6",
+                        "f8497fr",
+                        "fw9d4ui",
+                        "funnff6",
+                        "f1n2bkgp",
+                        "fyxyu0g",
+                        "f5fudq1",
+                        "f1cr0ken",
+                        "fztekkr",
+                        "f128riiv",
+                        "f12w5dms",
+                        "f1s4t3tb",
+                        "f19h6rng",
+                        "fyns6bt",
+                        "f1euv43f",
+                        "f15twtuk",
+                        "f1vgc2s3",
+                        "f1e31b4d",
+                        "fn14dot"
+                       ],
+                       "role": "AXGroup",
+                       "subrole": "AXEmptyGroup"
+                      },
+                      {
+                       "subrole": "AXEmptyGroup",
+                       "role": "AXGroup",
+                       "classes": [
+                        "fui-FluentProviderr1",
+                        "fui-FluentProvider",
+                        "fui-FluentProviderr0",
+                        "r1uy2qi7",
+                        "___4mw8x90",
+                        "f19n0e5",
+                        "f3rmtva",
+                        "f1o700av",
+                        "fk6fouc",
+                        "fkhj508",
+                        "figsok6",
+                        "f8497fr",
+                        "fw9d4ui",
+                        "funnff6",
+                        "f1n2bkgp",
+                        "fyxyu0g",
+                        "f5fudq1",
+                        "f1cr0ken",
+                        "fztekkr",
+                        "f128riiv",
+                        "f12w5dms",
+                        "f1s4t3tb",
+                        "f19h6rng",
+                        "fyns6bt",
+                        "f1euv43f",
+                        "f15twtuk",
+                        "f1vgc2s3",
+                        "f1e31b4d",
+                        "fn14dot"
+                       ]
+                      },
+                      {
+                       "subrole": "AXEmptyGroup",
+                       "classes": [
+                        "fui-FluentProviderr1",
+                        "fui-FluentProvider",
+                        "fui-FluentProviderr0",
+                        "r1uy2qi7",
+                        "___4mw8x90",
+                        "f19n0e5",
+                        "f3rmtva",
+                        "f1o700av",
+                        "fk6fouc",
+                        "fkhj508",
+                        "figsok6",
+                        "f8497fr",
+                        "fw9d4ui",
+                        "funnff6",
+                        "f1n2bkgp",
+                        "fyxyu0g",
+                        "f5fudq1",
+                        "f1cr0ken",
+                        "fztekkr",
+                        "f128riiv",
+                        "f12w5dms",
+                        "f1s4t3tb",
+                        "f19h6rng",
+                        "fyns6bt",
+                        "f1euv43f",
+                        "f15twtuk",
+                        "f1vgc2s3",
+                        "f1e31b4d",
+                        "fn14dot"
+                       ],
+                       "role": "AXGroup"
+                      },
+                      {
+                       "classes": [
+                        "fui-FluentProviderr1",
+                        "fui-FluentProvider",
+                        "fui-FluentProviderr0",
+                        "r1uy2qi7",
+                        "___4mw8x90",
+                        "f19n0e5",
+                        "f3rmtva",
+                        "f1o700av",
+                        "fk6fouc",
+                        "fkhj508",
+                        "figsok6",
+                        "f8497fr",
+                        "fw9d4ui",
+                        "funnff6",
+                        "f1n2bkgp",
+                        "fyxyu0g",
+                        "f5fudq1",
+                        "f1cr0ken",
+                        "fztekkr",
+                        "f128riiv",
+                        "f12w5dms",
+                        "f1s4t3tb",
+                        "f19h6rng",
+                        "fyns6bt",
+                        "f1euv43f",
+                        "f15twtuk",
+                        "f1vgc2s3",
+                        "f1e31b4d",
+                        "fn14dot"
+                       ],
+                       "role": "AXGroup",
+                       "subrole": "AXEmptyGroup"
+                      },
+                      {
+                       "subrole": "AXEmptyGroup",
+                       "role": "AXGroup",
+                       "classes": [
+                        "fui-FluentProviderr1",
+                        "fui-FluentProvider",
+                        "fui-FluentProviderr0",
+                        "r1uy2qi7",
+                        "___4mw8x90",
+                        "f19n0e5",
+                        "f3rmtva",
+                        "f1o700av",
+                        "fk6fouc",
+                        "fkhj508",
+                        "figsok6",
+                        "f8497fr",
+                        "fw9d4ui",
+                        "funnff6",
+                        "f1n2bkgp",
+                        "fyxyu0g",
+                        "f5fudq1",
+                        "f1cr0ken",
+                        "fztekkr",
+                        "f128riiv",
+                        "f12w5dms",
+                        "f1s4t3tb",
+                        "f19h6rng",
+                        "fyns6bt",
+                        "f1euv43f",
+                        "f15twtuk",
+                        "f1vgc2s3",
+                        "f1e31b4d",
+                        "fn14dot"
+                       ]
+                      },
+                      {
+                       "role": "AXGroup",
+                       "subrole": "AXEmptyGroup",
+                       "classes": [
+                        "fui-FluentProviderr1",
+                        "fui-FluentProvider",
+                        "fui-FluentProviderr0",
+                        "r1uy2qi7",
+                        "___4mw8x90",
+                        "f19n0e5",
+                        "f3rmtva",
+                        "f1o700av",
+                        "fk6fouc",
+                        "fkhj508",
+                        "figsok6",
+                        "f8497fr",
+                        "fw9d4ui",
+                        "funnff6",
+                        "f1n2bkgp",
+                        "fyxyu0g",
+                        "f5fudq1",
+                        "f1cr0ken",
+                        "fztekkr",
+                        "f128riiv",
+                        "f12w5dms",
+                        "f1s4t3tb",
+                        "f19h6rng",
+                        "fyns6bt",
+                        "f1euv43f",
+                        "f15twtuk",
+                        "f1vgc2s3",
+                        "f1e31b4d",
+                        "fn14dot"
+                       ]
+                      },
+                      {
+                       "classes": [
+                        "fui-FluentProviderr1",
+                        "fui-FluentProvider",
+                        "fui-FluentProviderr0",
+                        "r1uy2qi7",
+                        "___4mw8x90",
+                        "f19n0e5",
+                        "f3rmtva",
+                        "f1o700av",
+                        "fk6fouc",
+                        "fkhj508",
+                        "figsok6",
+                        "f8497fr",
+                        "fw9d4ui",
+                        "funnff6",
+                        "f1n2bkgp",
+                        "fyxyu0g",
+                        "f5fudq1",
+                        "f1cr0ken",
+                        "fztekkr",
+                        "f128riiv",
+                        "f12w5dms",
+                        "f1s4t3tb",
+                        "f19h6rng",
+                        "fyns6bt",
+                        "f1euv43f",
+                        "f15twtuk",
+                        "f1vgc2s3",
+                        "f1e31b4d",
+                        "fn14dot"
+                       ],
+                       "role": "AXGroup",
+                       "subrole": "AXEmptyGroup"
+                      },
+                      {
+                       "classes": [
+                        "fui-FluentProviderr1",
+                        "fui-FluentProvider",
+                        "fui-FluentProviderr0",
+                        "r1uy2qi7",
+                        "___4mw8x90",
+                        "f19n0e5",
+                        "f3rmtva",
+                        "f1o700av",
+                        "fk6fouc",
+                        "fkhj508",
+                        "figsok6",
+                        "f8497fr",
+                        "fw9d4ui",
+                        "funnff6",
+                        "f1n2bkgp",
+                        "fyxyu0g",
+                        "f5fudq1",
+                        "f1cr0ken",
+                        "fztekkr",
+                        "f128riiv",
+                        "f12w5dms",
+                        "f1s4t3tb",
+                        "f19h6rng",
+                        "fyns6bt",
+                        "f1euv43f",
+                        "f15twtuk",
+                        "f1vgc2s3",
+                        "f1e31b4d",
+                        "fn14dot"
+                       ],
+                       "role": "AXGroup",
+                       "subrole": "AXEmptyGroup"
+                      },
+                      {
+                       "subrole": "AXEmptyGroup",
+                       "classes": [
+                        "fui-FluentProviderr1",
+                        "fui-FluentProvider",
+                        "fui-FluentProviderr0",
+                        "r1uy2qi7",
+                        "___4mw8x90",
+                        "f19n0e5",
+                        "f3rmtva",
+                        "f1o700av",
+                        "fk6fouc",
+                        "fkhj508",
+                        "figsok6",
+                        "f8497fr",
+                        "fw9d4ui",
+                        "funnff6",
+                        "f1n2bkgp",
+                        "fyxyu0g",
+                        "f5fudq1",
+                        "f1cr0ken",
+                        "fztekkr",
+                        "f128riiv",
+                        "f12w5dms",
+                        "f1s4t3tb",
+                        "f19h6rng",
+                        "fyns6bt",
+                        "f1euv43f",
+                        "f15twtuk",
+                        "f1vgc2s3",
+                        "f1e31b4d",
+                        "fn14dot"
+                       ],
+                       "role": "AXGroup"
+                      },
+                      {
+                       "subrole": "AXEmptyGroup",
+                       "classes": [
+                        "fui-FluentProviderr1",
+                        "fui-FluentProvider",
+                        "fui-FluentProviderr0",
+                        "r1uy2qi7",
+                        "___4mw8x90",
+                        "f19n0e5",
+                        "f3rmtva",
+                        "f1o700av",
+                        "fk6fouc",
+                        "fkhj508",
+                        "figsok6",
+                        "f8497fr",
+                        "fw9d4ui",
+                        "funnff6",
+                        "f1n2bkgp",
+                        "fyxyu0g",
+                        "f5fudq1",
+                        "f1cr0ken",
+                        "fztekkr",
+                        "f128riiv",
+                        "f12w5dms",
+                        "f1s4t3tb",
+                        "f19h6rng",
+                        "fyns6bt",
+                        "f1euv43f",
+                        "f15twtuk",
+                        "f1vgc2s3",
+                        "f1e31b4d",
+                        "fn14dot"
+                       ],
+                       "role": "AXGroup"
+                      },
+                      {
+                       "classes": [
+                        "fui-FluentProviderr1",
+                        "fui-FluentProvider",
+                        "fui-FluentProviderr0",
+                        "r1uy2qi7",
+                        "___1bkd12z",
+                        "f19n0e5",
+                        "f3rmtva",
+                        "f1o700av",
+                        "fk6fouc",
+                        "fkhj508",
+                        "figsok6",
+                        "f8497fr",
+                        "fw9d4ui",
+                        "funnff6",
+                        "f1n2bkgp",
+                        "fyxyu0g",
+                        "f5fudq1",
+                        "f1cr0ken",
+                        "fztekkr",
+                        "f128riiv",
+                        "f12w5dms",
+                        "f1s4t3tb",
+                        "f19h6rng",
+                        "fyns6bt",
+                        "f1euv43f",
+                        "f15twtuk",
+                        "f1vgc2s3",
+                        "f1e31b4d",
+                        "fgeomu4",
+                        "f1aehjj5"
+                       ],
+                       "role": "AXGroup",
+                       "subrole": "AXEmptyGroup"
+                      },
+                      {
+                       "domId": "ui-paint-timing-container",
+                       "subrole": "AXEmptyGroup",
+                       "role": "AXGroup"
+                      },
+                      {
+                       "role": "AXGroup",
+                       "subrole": "AXEmptyGroup"
+                      },
+                      {
+                       "role": "AXGroup",
+                       "subrole": "AXEmptyGroup"
+                      },
+                      {
+                       "classes": [
+                        "fui-FluentProviderr1",
+                        "fui-FluentProvider",
+                        "fui-FluentProviderr0",
+                        "r1uy2qi7",
+                        "___4mw8x90",
+                        "f19n0e5",
+                        "f3rmtva",
+                        "f1o700av",
+                        "fk6fouc",
+                        "fkhj508",
+                        "figsok6",
+                        "f8497fr",
+                        "fw9d4ui",
+                        "funnff6",
+                        "f1n2bkgp",
+                        "fyxyu0g",
+                        "f5fudq1",
+                        "f1cr0ken",
+                        "fztekkr",
+                        "f128riiv",
+                        "f12w5dms",
+                        "f1s4t3tb",
+                        "f19h6rng",
+                        "fyns6bt",
+                        "f1euv43f",
+                        "f15twtuk",
+                        "f1vgc2s3",
+                        "f1e31b4d",
+                        "fn14dot"
+                       ],
+                       "role": "AXGroup",
+                       "subrole": "AXEmptyGroup"
+                      }
+                     ]
+                    }
+                   ],
+                   "role": "AXWebArea"
+                  }
+                 ]
+                }
+               ]
+              }
+             ]
+            },
+            {
+             "role": "AXGroup",
+             "classes": [
+              "View"
+             ]
+            }
+           ],
+           "role": "AXGroup"
+          }
+         ],
+         "role": "AXGroup",
+         "classes": [
+          "BrowserFrameView"
+         ]
+        }
+       ],
+       "classes": [
+        "NonClientView"
+       ],
+       "role": "AXGroup"
+      }
+     ],
+     "role": "AXGroup",
+     "classes": [
+      "BrowserRootView"
+     ],
+     "title": "Sync | Acme - Work | Microsoft Teams - Camera and microphone recording - Helium - Work"
+    },
+    {
+     "role": "AXButton",
+     "subrole": "AXCloseButton"
+    },
+    {
+     "subrole": "AXFullScreenButton",
+     "role": "AXButton",
+     "children": [
+      {
+       "children": [
+        {
+         "role": "AXGroup"
+        }
+       ],
+       "role": "AXGroup"
+      }
+     ]
+    },
+    {
+     "subrole": "AXMinimizeButton",
+     "role": "AXButton"
+    }
+   ],
+   "title": "Sync | Acme - Work | Microsoft Teams - Camera and microphone recording - Helium - Work"
+  }
+ }
+]

@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust format and core tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history lets the advisory formatter diff against the PR base.
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      # The existing workspace predates rustfmt enforcement. Keep a visible
+      # changed-file check as migration guidance without blocking unrelated
+      # product work until the baseline is formatted in its own change.
+      - name: Advisory formatting check for changed Rust files
+        continue-on-error: true
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          set -euo pipefail
+          git diff --name-only --diff-filter=d "$BASE_SHA" HEAD -- '*.rs' -z \
+            | xargs -0 -r rustfmt --edition 2024 --config skip_children=true --check
+      - name: Install native test dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2-dev pkg-config
+      - name: Test portable crates
+        run: cargo test -p stenly-core -p stenly-platform -p stenly-asr
+
+  site:
+    name: Site tests
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: site
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: site/package-lock.json
+      - name: Install Zola
+        uses: taiki-e/install-action@v2
+        with:
+          tool: zola
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm test
+      - name: Build production site
+        run: npm run build:pages

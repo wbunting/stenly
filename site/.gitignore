@@ -1,0 +1,6 @@
+node_modules/
+public/
+static/site.css
+.playwright-cli/
+.impeccable/review/
+.impeccable/

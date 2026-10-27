@@ -1,0 +1,50 @@
+[package]
+name = "stenly-share"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Server for end-to-end encrypted Stenly meeting-note share links"
+publish = false
+rust-version = "1.99"
+default-run = "stenly-share"
+
+# Its own workspace: hearth needs rustc 1.99 (see rust-toolchain.toml), while
+# the desktop app's workspace stays on stable.
+[workspace]
+
+[dependencies]
+# hearth = Topcoat fork for local-first apps (public, fetched anonymously over
+# HTTPS). Pinned rev.
+hearth = { git = "https://github.com/wbunting/hearth.git", rev = "82875db6f13aa5f3f333bdfdbf68e97d3b04dff3" }
+topcoat = { git = "https://github.com/wbunting/hearth.git", rev = "82875db6f13aa5f3f333bdfdbf68e97d3b04dff3", features = ["tailwind"] }
+toasty = { version = "0.11", features = ["sqlite", "migration"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "signal"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+sha2 = "0.10"
+getrandom = "0.3"
+time = { version = "0.3", features = ["formatting", "parsing"] }
+http = "1"
+bytes = "1"
+# OIDC: discovery, token exchange (blocking, run on the blocking pool).
+ureq = { version = "3", features = ["json"] }
+# Verifies OIDC ID-token signatures (RS256/ES256); already in the tree via rustls.
+ring = "0.17"
+# Query/form decoding for the dev IdP (already in the tree via url).
+form_urlencoded = "1"
+
+[build-dependencies]
+topcoat = { git = "https://github.com/wbunting/hearth.git", rev = "82875db6f13aa5f3f333bdfdbf68e97d3b04dff3", default-features = false, features = ["tailwind"] }
+
+[dev-dependencies]
+aes-gcm = "0.10"
+http = "1"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[profile.release]
+strip = true
+lto = "thin"
+codegen-units = 4

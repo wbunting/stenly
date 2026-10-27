@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ page.title }} — Stenly{% endblock title %}
+{% block description %}{{ page.title }}. Local-first meeting recording and dictation for Linux desktops.{% endblock description %}
+{% block canonical %}https://stenly.ai{{ current_path }}{% endblock canonical %}
+{% block og_title %}{{ page.title }} — Stenly{% endblock og_title %}
+{% block og_url %}https://stenly.ai{{ current_path }}{% endblock og_url %}
+{% block main %}
+<main class="install-main" id="main">
+  <article class="install-docs">
+    <p class="install-kicker"><a href="/">Stenly</a> / Linux</p>
+    <p class="install-availability"><strong>Public desktop installers are not available yet.</strong> These pages describe platform setup requirements; you cannot complete an installation from them today.</p>
+    {{ page.content | safe }}
+  </article>
+</main>
+{% endblock main %}

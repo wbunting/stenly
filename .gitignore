@@ -1,0 +1,46 @@
+target/
+.DS_Store
+*.wav
+.linux-test/
+__pycache__/
+*.pyc
+
+# Secrets and local environment (never commit)
+.env
+.env.*
+!.env.example
+*.p8
+*.p12
+*.pem
+*.key
+*.mobileprovision
+*.provisionprofile
+AuthKey_*.p8
+
+# Machine-local agent instructions
+AGENTS.override.md
+AGENTS.local.md
+CLAUDE.local.md
+
+# Generated site output and dependencies
+node_modules/
+site/public/
+site/static/site.css
+
+# Local data, recordings and evidence (synthetic or not, keep out of git)
+*.m4a
+*.mp3
+*.flac
+*.caf
+recordings/
+Recordings/
+screenshots/
+evidence/
+*.sqlite
+*.db
+*.db-*
+/data/
+/research/
+docs/research/
+.playwright-cli/
+.impeccable/

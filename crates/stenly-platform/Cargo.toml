@@ -1,0 +1,31 @@
+[package]
+name = "stenly-platform"
+description = "OS backends for stenly's platform traits. The only crate with OS-specific code."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+# Linux: talk to PipeWire natively (else cpal falls back to ALSA/Pulse).
+pipewire = ["cpal/pipewire"]
+pulseaudio = ["cpal/pulseaudio"]
+
+[dependencies]
+stenly-core.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+crossbeam-channel.workspace = true
+cpal.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+cidre = { version = "0.29", default-features = false, features = ["core_audio", "dispatch", "av", "blocks", "async", "macos_14_2"] }
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSApplication", "NSWindow", "NSResponder", "NSRunningApplication", "NSView", "NSWorkspace", "NSTouchBar", "NSImage", "NSImageRep", "NSBitmapImageRep", "NSGraphics", "NSGraphicsContext", "NSColor", "NSColorSpace", "NSFontDescriptor", "NSMenu", "NSMenuItem", "NSCell", "NSGlassEffectView", "NSUserInterfaceItemIdentification", "NSToolbar", "NSPasteboard", "NSPasteboardItem", "NSScreen", "NSPanel", "objc2-core-foundation"] }
+objc2-foundation = { version = "0.3", features = ["NSURL", "NSString", "NSArray", "NSGeometry", "NSObject", "NSData"] }
+objc2-core-foundation = { version = "0.3", features = ["CFString"] }
+objc2-service-management = { version = "0.3", features = ["SMAppService"] }
+objc2-application-services = { version = "0.3", features = ["AXUIElement", "HIServices"] }
+objc2-event-kit = { version = "0.3", features = ["EKCalendar", "EKCalendarItem", "EKEvent", "EKEventStore", "EKObject", "EKParticipant", "EKTypes", "block2", "objc2-core-graphics"] }
+block2 = "0.6"
+chrono.workspace = true

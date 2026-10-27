@@ -1,0 +1,33 @@
+[package]
+name = "stenly-cli"
+description = "Headless stenly: record, transcribe, calendar checks."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "stenly-cli"
+path = "src/main.rs"
+
+[[bin]]
+name = "stenly-speech"
+path = "src/speech.rs"
+
+[features]
+pipewire = ["stenly-platform/pipewire"]
+pulseaudio = ["stenly-platform/pulseaudio"]
+
+[dependencies]
+crossbeam-channel.workspace = true
+stenly-core.workspace = true
+stenly-agent.workspace = true
+stenly-asr.workspace = true
+stenly-platform.workspace = true
+anyhow.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+clap.workspace = true
+chrono.workspace = true
+serde_json.workspace = true
+ctrlc = "3"
+

@@ -1,0 +1,58 @@
+[
+ {
+  "app": "us.zoom.xos",
+  "title": "Zoom Meeting",
+  "root": {
+   "role": "AXWindow",
+   "title": "Zoom Meeting",
+   "children": [
+    {
+     "role": "AXTabGroup",
+     "desc": "Riley Chen, Computer audio unmuted",
+     "children": [
+      {
+       "role": "AXButton",
+       "desc": "View Riley Chen's profile"
+      }
+     ]
+    },
+    {
+     "role": "AXTabGroup",
+     "desc": "Jordan Avery, Computer audio unmuted, Video on",
+     "children": [
+      {
+       "role": "AXButton",
+       "desc": "View Jordan Avery's profile"
+      }
+     ]
+    },
+    {
+     "role": "AXSplitter"
+    },
+    {
+     "role": "AXButton"
+    },
+    {
+     "role": "AXButton"
+    },
+    {
+     "role": "AXButton"
+    }
+   ]
+  }
+ },
+ {
+  "app": "us.zoom.xos",
+  "title": "Zoom Workplace",
+  "root": {
+   "role": "AXWindow",
+   "title": "Zoom Workplace",
+   "children": [
+    {
+     "role": "AXButton",
+     "desc": "Zoom, Jordan Avery, In a Zoom Meeting, Pro account"
+    }
+   ]
+  }
+ }
+]

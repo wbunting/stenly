@@ -1,0 +1,25 @@
+base_url = "https://stenly.ai"
+title = "Stenly — Know who said what. Bring the meeting to your agent."
+description = "A local-first meeting recorder and dictation app for macOS and Linux. Real speaker names, Obsidian notes, and meeting context for coding agents. No bot joins the call."
+compile_sass = false
+build_search_index = false
+minify_html = true
+
+[extra]
+repository_url = "https://github.com/wbunting/stenly"
+# Stable GitHub release asset names published by the tag workflow.
+macos_download_url = "https://github.com/wbunting/stenly/releases/latest/download/stenly-macos.dmg"
+linux_download_url = "https://github.com/wbunting/stenly/releases/latest/download/stenly-linux.tar.gz"
+# Per-distro setup pages rendered in the Linux download picker.
+linux_install_options = [
+  { name = "Ubuntu / Debian", url = "/install/ubuntu/" },
+  { name = "Fedora", url = "/install/fedora/" },
+  { name = "Arch Linux", url = "/install/arch/" },
+]
+# Pricing shown on /pricing/.
+license_price = "$10"
+free_meetings = 10
+# Team contact destination; dead placeholder until a contact flow exists.
+team_contact_url = "mailto:hello@stenly.ai?subject=Stenly%20for%20teams"
+# Optional external hosted service. No sign-in is advertised until this is set.
+hosted_url = ""
