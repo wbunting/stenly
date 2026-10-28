@@ -23,7 +23,6 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cargo install --locked hearth-cli --version =0.1.0
 
 COPY rust-toolchain.toml Cargo.toml Cargo.lock build.rs ./
-COPY .cargo .cargo
 COPY src src
 COPY web web
 COPY assets assets
