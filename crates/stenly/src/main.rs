@@ -18,6 +18,7 @@ mod meeting_browser;
 mod menus;
 mod onboarding;
 mod popup;
+mod search_palette;
 mod shortcut_field;
 mod text_input;
 mod theme;
@@ -77,6 +78,7 @@ fn main() {
         })
         .detach();
         text_input::bind_keys(cx);
+        search_palette::bind_keys(cx);
 
         // Local MCP endpoint so AI tools can pull meetings while the app runs.
         if config.mcp.http {

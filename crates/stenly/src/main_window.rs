@@ -40,6 +40,8 @@ pub enum Page {
 pub struct MainWindow {
     controller: Entity<Controller>,
     pub(crate) browser: Entity<crate::meeting_browser::MeetingBrowser>,
+    /// Search palette (⌘F / ⌘K or the magnifier by the traffic lights), while open.
+    search: Option<(Entity<crate::search_palette::SearchPalette>, Subscription)>,
     pub(crate) meeting_match: Option<usize>,
     pub(crate) meeting_scroll: gpui::ScrollHandle,
     pub(crate) match_anchor: gpui::ScrollAnchor,
@@ -432,10 +434,7 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                     }
                     let browser = cx.new(|cx| crate::meeting_browser::MeetingBrowser::new(controller.read(cx).config.clone(), cx));
                     subs.push(cx.subscribe(&browser, |this: &mut MainWindow, _, ev: &crate::meeting_browser::OpenMeeting, cx| {
-                        this.open_meeting(ev.dir.clone(), cx);
-                        this.meeting_match = ev.segment;
-                        this.show_transcript = ev.segment.is_some();
-                        this.match_pending = ev.segment.is_some();
+                        this.open_search_hit(ev, cx);
                     }));
                     let mut previous_revision = controller.read(cx).library_revision;
                     subs.push(cx.observe(&controller, move |this: &mut MainWindow, ctrl, cx| {
@@ -472,6 +471,7 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                     let mut mw = MainWindow {
                         controller,
                         browser,
+                        search: None,
                         meeting_match: None,
                         meeting_scroll,
                         match_anchor,
@@ -591,6 +591,14 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                             mw.event_card = Some((ev, gpui::point(px(420.), px(330.))));
                         }
                     }
+                    // Dev: STENLY_SEARCH=<query> opens the search palette with that query.
+                    if let Ok(q) = std::env::var("STENLY_SEARCH") {
+                        mw.open_search(window, cx);
+                        if let Some((p, _)) = &mw.search {
+                            let input = p.read(cx).query.clone();
+                            input.update(cx, |i, cx| i.set_text(q, cx));
+                        }
+                    }
                     mw
                 })
             },
@@ -685,6 +693,11 @@ fn demo_events(now: chrono::DateTime<Utc>) -> Vec<stenly_core::calendar::Calenda
         mk("Customer call — Acme onboarding and next steps for the pilot", 4 * day, 60, Some(Provider::Teams), &["Dana Whitfield", "Chris Moore"], "#f4511e"),
     ]
 }
+
+/// Titlebar search button: vertically centred on the traffic lights (placed at
+/// y=18, 14pt tall), right-aligned with the sidebar's rows.
+const SEARCH_BUTTON_TOP: f32 = 11.;
+const SEARCH_BUTTON_SIZE: f32 = 28.;
 
 /// Sidebar column width (incl. the glass panel's inset), in points.
 const SIDEBAR_W: f32 = 216.;
@@ -851,6 +864,41 @@ impl MainWindow {
                         .when(more > 0, |d| d.child(div().text_size(px(theme::SUBHEAD)).text_color(theme::faint()).child(format!("and {more} more")))),
                 )
             })
+    }
+
+    /// Open a meeting from the library or search, jumping to the matched segment.
+    fn open_search_hit(&mut self, ev: &crate::meeting_browser::OpenMeeting, cx: &mut Context<Self>) {
+        self.open_meeting(ev.dir.clone(), cx);
+        self.meeting_match = ev.segment;
+        self.show_transcript = ev.segment.is_some();
+        self.match_pending = ev.segment.is_some();
+    }
+
+    /// Show the search palette (or focus it again if it's already open).
+    pub(crate) fn open_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        use crate::search_palette::{PaletteEvent, SearchPalette};
+        if self.search.is_none() {
+            let cfg = self.controller.read(cx).config.clone();
+            let palette = cx.new(|cx| SearchPalette::new(cfg, cx));
+            let sub = cx.subscribe_in(&palette, window, |this: &mut MainWindow, _, ev: &PaletteEvent, window, cx| {
+                if let PaletteEvent::Open(hit) = ev {
+                    this.open_search_hit(hit, cx);
+                }
+                this.close_search(window, cx);
+            });
+            self.search = Some((palette, sub));
+        }
+        if let Some((p, _)) = &self.search {
+            window.focus(&p.read(cx).focus_handle(cx), cx);
+        }
+        cx.notify();
+    }
+
+    fn close_search(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        if self.search.take().is_some() {
+            window.blur(cx);
+            cx.notify();
+        }
     }
 
     pub fn open_meeting(&mut self, dir: std::path::PathBuf, cx: &mut Context<Self>) {
@@ -2828,6 +2876,53 @@ impl Render for MainWindow {
                     // Deferred: painted after the content, so its text can't draw over the cards.
                     .when_some(toasts, |d, t| d.child(gpui::deferred(t).with_priority(1))),
             )
+            // Search sits in the titlebar band, just right of the traffic lights (Granola).
+            .child(
+                div()
+                    .absolute()
+                    .top(px(SEARCH_BUTTON_TOP))
+                    // Same right edge as the selection highlight in the sidebar.
+                    .left(px(SIDEBAR_W - if glass_enabled() { SIDEBAR_INSET + 10. } else { 10. } - SEARCH_BUTTON_SIZE))
+                    .child(
+                        div()
+                            .id("titlebar-search")
+                            .role(gpui::Role::Button)
+                            .aria_label("Search meetings")
+                            .size(px(SEARCH_BUTTON_SIZE))
+                            .flex()
+                            .items_center()
+                            .justify_center()
+                            .rounded(px(7.))
+                            .when(self.search.is_some(), |d| d.bg(theme::selected()))
+                            .hover(|d| d.bg(theme::hover()))
+                            .active(|d| d.bg(theme::selected()))
+                            .tooltip(|_, cx| cx.new(|_| Tip("Search  ⌘F".into())).into())
+                            .on_click(cx.listener(|this, _, window, cx| {
+                                if this.search.is_some() {
+                                    this.close_search(window, cx);
+                                } else {
+                                    this.open_search(window, cx);
+                                }
+                            }))
+                            .child(crate::icons::icon_w(icons::SEARCH, 14., crate::icons::Weight::Medium, theme::muted())),
+                    ),
+            )
+            .when_some(self.search.as_ref().map(|(p, _)| p.clone()), |d, palette| {
+                d.child(gpui::deferred(
+                    div()
+                        .id("search-backdrop")
+                        .absolute()
+                        .inset_0()
+                        .occlude()
+                        .flex()
+                        .justify_center()
+                        .items_start()
+                        .pt(px(56.))
+                        .px(px(24.))
+                        .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, window, cx| this.close_search(window, cx)))
+                        .child(palette),
+                ).with_priority(2))
+            })
             .when_some(self.event_card.clone(), |d, (ev, pos)| {
                 let card = self.event_card(&ev, cx);
                 d.child(

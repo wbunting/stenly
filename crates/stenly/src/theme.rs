@@ -96,6 +96,10 @@ pub fn border() -> Rgba {
 pub fn divider() -> Rgba {
     pick(rgba(0x0000001a), rgba(0xffffff19))
 }
+/// Search palette: an opaque floating panel, so content never shows through.
+pub fn palette_bg() -> Rgba {
+    pick(rgb(0xfbfbfb), rgb(0x2a2a2a))
+}
 /// Menus, popovers, floating panels.
 pub fn popup_bg() -> Rgba {
     pick(rgba(0xf5f5f5f2), rgba(0x262626f2))

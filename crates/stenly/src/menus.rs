@@ -12,6 +12,7 @@ pub fn init(controller: Entity<Controller>, cx: &mut App) {
     cx.bind_keys([
         KeyBinding::new("cmd-f", FindMeetings, None),
         KeyBinding::new("ctrl-f", FindMeetings, None),
+        KeyBinding::new("cmd-k", FindMeetings, None),
         KeyBinding::new("cmd-q", Quit, None),
         KeyBinding::new("cmd-h", Hide, None),
         KeyBinding::new("alt-cmd-h", HideOthers, None),
@@ -34,8 +35,7 @@ pub fn init(controller: Entity<Controller>, cx: &mut App) {
         let Some(w) = cx.active_window().and_then(|w| w.downcast::<crate::main_window::MainWindow>()) else { return };
         cx.defer(move |cx| {
             let _ = w.update(cx, |this, window, cx| {
-                this.go(crate::main_window::Page::Home, cx);
-                this.browser.clone().update(cx, |b, cx| b.focus_search(window, cx));
+                this.open_search(window, cx);
             });
         });
     });

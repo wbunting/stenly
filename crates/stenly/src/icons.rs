@@ -81,6 +81,7 @@ sym!(KEYBOARD, "keyboard", r#"<path d="M10 8h.01"/><path d="M12 12h.01"/><path d
 sym!(CLOCK, "clock", r#"<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>"#);
 sym!(ARROW_UP, "chevron.up", r#"<path d="m18 15-6-6-6 6"/>"#);
 sym!(QUOTE, "text.quote", r#"<path d="M17 6H3"/><path d="M21 12H8"/><path d="M21 18H8"/><path d="M3 12v6"/>"#);
+sym!(SEARCH, "magnifyingglass", r#"<circle cx="11" cy="11" r="8"/><path d="m21 21-4.34-4.34"/>"#);
 sym!(SIDEBAR, "sidebar.left", r#"<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/>"#);
 sym!(RECIPE, "text.badge.star", r#"<path d="M3 6h11"/><path d="M3 12h8"/><path d="M3 18h6"/><path d="m17.5 11 1.4 2.8 3.1.5-2.2 2.2.5 3.1-2.8-1.5-2.8 1.5.5-3.1-2.2-2.2 3.1-.5z"/>"#);
 sym!(LOCK, "lock", r#"<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>"#);
