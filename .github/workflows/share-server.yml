@@ -1,7 +1,7 @@
 # stenly-share (server/stenly-share): tests + Docker image build.
 #
-# hearth is public and fetched anonymously over HTTPS at a pinned revision, so
-# every job runs without secrets (including on pull requests from forks).
+# hearth and hearth-cli come from crates.io at pinned versions, so every job
+# runs without secrets (including on pull requests from forks).
 name: share-server
 
 on:
@@ -42,14 +42,14 @@ jobs:
             ~/.cargo/git
             server/stenly-share/target
           key: share-${{ runner.os }}-${{ hashFiles('server/stenly-share/Cargo.lock', 'server/stenly-share/rust-toolchain.toml') }}
-      - name: Toolchain + topcoat CLI
+      - name: Toolchain + hearth CLI
         run: |
           rustup show active-toolchain || rustup toolchain install
-          cargo install --locked --git https://github.com/wbunting/hearth.git --rev 82875db6f13aa5f3f333bdfdbf68e97d3b04dff3 topcoat-cli
+          cargo install --locked hearth-cli --version =0.1.0
       - name: Build, bundle assets, test
         run: |
           cargo build --release --locked
-          topcoat asset bundle --release
+          hearth asset bundle --release
           cargo test --release --locked
           cargo clippy --release --locked --all-targets -- -D warnings
 

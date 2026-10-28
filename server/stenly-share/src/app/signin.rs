@@ -1,6 +1,6 @@
 //! `/auth/*`: OIDC sign-in for company mode.
 
-use topcoat::{
+use hearth::{
     Result,
     context::{Cx, app_context},
     router::{
@@ -54,7 +54,7 @@ async fn sign_in_page(cx: &Cx) -> Result<impl View> {
 #[route(GET "/auth/start")]
 async fn start(cx: &Cx) -> Result<SeeOther> {
     let cfg = app_context::<Config>(cx);
-    let Some(o) = &cfg.oidc else { return Err(topcoat::router::error::not_found().into()) };
+    let Some(o) = &cfg.oidc else { return Err(hearth::router::error::not_found().into()) };
     // Each start holds a pending login (and may fetch discovery): limit it.
     // The callback needs a `state` only a (limited) start can mint.
     crate::api::rate_limit(cx, crate::api::Bucket::Auth)?;
@@ -76,7 +76,7 @@ struct Callback {
 #[page("/auth/callback")]
 async fn callback(cx: &Cx) -> Result<impl View> {
     let cfg = app_context::<Config>(cx);
-    let Some(o) = cfg.oidc.clone() else { return Err(topcoat::router::error::not_found().into()) };
+    let Some(o) = cfg.oidc.clone() else { return Err(hearth::router::error::not_found().into()) };
     let q = query_params::<Callback>(cx)?;
     let fail = |msg: String| Ok(state_page_owned(cx, StatusCode::BAD_REQUEST, "Sign-in didn’t work", msg));
     if let Some(e) = &q.error {
@@ -95,10 +95,10 @@ async fn callback(cx: &Cx) -> Result<impl View> {
             eprintln!("stenly-share: sign-in failed: {e}");
             return fail("The identity provider’s response couldn’t be verified. Try again.".into());
         }
-        Err(e) => return Err(topcoat::router::error::internal_server_error(e).into()),
+        Err(e) => return Err(hearth::router::error::internal_server_error(e).into()),
     };
     match auth::sign_in(cx, &identity).await {
-        Ok(_) => Err(topcoat::router::error::see_other(pending.return_to).into()),
+        Ok(_) => Err(hearth::router::error::see_other(pending.return_to).into()),
         Err(e) if e.code == "domain_not_allowed" => Ok(state_page_owned(
             cx,
             StatusCode::FORBIDDEN,
@@ -115,7 +115,7 @@ async fn logout(cx: &Cx) -> Result<SeeOther> {
     Ok(see_other("/"))
 }
 
-fn state_page_owned(cx: &Cx, status: StatusCode, heading: &'static str, body: String) -> topcoat::view::BoxView<'static> {
+fn state_page_owned(cx: &Cx, status: StatusCode, heading: &'static str, body: String) -> hearth::view::BoxView<'static> {
     view! { cx =>
         (status)
         shell(title: format!("{heading} · Stenly"), description: "Stenly share".to_owned(),

@@ -2,8 +2,8 @@
 #
 # stenly-share: one small image for both the hosted default and self-hosting.
 #
-# hearth (the web framework) is a public GitHub repo fetched anonymously over
-# HTTPS at a pinned revision; no credentials are needed:
+# hearth (the web framework) and its asset bundler hearth-cli are published on
+# crates.io at pinned versions; no credentials are needed:
 #
 #   cd server/stenly-share
 #   docker build -t stenly-share .
@@ -13,15 +13,14 @@ ARG RUST_VERSION=1.99.1
 # ---------------------------------------------------------------- build
 FROM rust:${RUST_VERSION}-slim-bookworm AS build
 RUN apt-get update \
- && apt-get install -y --no-install-recommends git ca-certificates pkg-config \
+ && apt-get install -y --no-install-recommends ca-certificates pkg-config \
  && rm -rf /var/lib/apt/lists/*
-ENV CARGO_NET_GIT_FETCH_WITH_CLI=true CARGO_TERM_COLOR=never
+ENV CARGO_TERM_COLOR=never
 WORKDIR /src
 
-# The asset bundler (`topcoat asset bundle`), pinned to the framework's version.
+# The asset bundler (`hearth asset bundle`), pinned to the framework's version.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
-    cargo install --locked --git https://github.com/wbunting/hearth.git --rev 82875db6f13aa5f3f333bdfdbf68e97d3b04dff3 topcoat-cli
+    cargo install --locked hearth-cli --version =0.1.0
 
 COPY rust-toolchain.toml Cargo.toml Cargo.lock build.rs ./
 COPY .cargo .cargo
@@ -33,10 +32,9 @@ COPY migrations migrations
 # Build the binary, then scan it and bundle its assets (CSS, JS, fonts) next
 # to it. Caches keep rebuilds fast; the outputs are copied out of the cache.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
-    --mount=type=cache,target=/usr/local/cargo/git \
     --mount=type=cache,target=/src/target \
     cargo build --release --locked --bin stenly-share \
- && topcoat asset bundle --release \
+ && hearth asset bundle --release \
  && mkdir -p /out \
  && cp target/release/stenly-share /out/ \
  && cp -r target/release/assets /out/assets

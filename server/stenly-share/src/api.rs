@@ -9,7 +9,7 @@ use std::{
 };
 
 use serde::{Deserialize, Serialize};
-use topcoat::{
+use hearth::{
     context::{Cx, app_context},
     router::{
         Body, StatusCode, header,
@@ -68,12 +68,12 @@ impl ApiError {
     }
 }
 
-/// The one `ApiError` → Topcoat error mapping, for HTML routes (sign-in)
+/// The one `ApiError` → hearth error mapping, for HTML routes (sign-in)
 /// that call API helpers. Each status the HTML routes can meet keeps its
 /// meaning; anything else is a logged 500.
-impl From<ApiError> for topcoat::Error {
+impl From<ApiError> for hearth::Error {
     fn from(e: ApiError) -> Self {
-        use topcoat::router::error as err;
+        use hearth::router::error as err;
         match e.status {
             StatusCode::TOO_MANY_REQUESTS => err::too_many_requests(e.retry_after.unwrap_or(60)).into(),
             // The identity provider is unreachable: ask the browser to retry.
@@ -142,8 +142,8 @@ pub struct Upload {
 /// early with 413 instead of being buffered.
 pub async fn read_upload(cfg: &Config, max_bytes: usize, body: Body) -> ApiResult<Upload> {
     let limit = max_bytes / 3 * 4 + 8 + 16 * 1024;
-    let bytes = topcoat::router::to_bytes(body, limit).await.map_err(|e| {
-        if e.downcast_ref::<topcoat::router::error::ContentTooLargeError>().is_some() {
+    let bytes = hearth::router::to_bytes(body, limit).await.map_err(|e| {
+        if e.downcast_ref::<hearth::router::error::ContentTooLargeError>().is_some() {
             ApiError::too_large(max_bytes)
         } else {
             ApiError::bad_request("bad_body", "couldn't read the request body")
@@ -256,8 +256,8 @@ mod tests {
     #[test]
     fn api_errors_keep_their_meaning_in_html_routes() {
         let status = |e: ApiError| {
-            let cx = topcoat::context::CxTestBuilder::new().build();
-            topcoat::router::response::IntoResponse::into_response(topcoat::Error::from(e), &cx).unwrap().status()
+            let cx = hearth::context::CxTestBuilder::new().build();
+            hearth::router::response::IntoResponse::into_response(hearth::Error::from(e), &cx).unwrap().status()
         };
         let mut limited = ApiError::new(StatusCode::TOO_MANY_REQUESTS, "rate_limited", "x");
         limited.retry_after = Some(5);

@@ -13,10 +13,9 @@ default-run = "stenly-share"
 [workspace]
 
 [dependencies]
-# hearth = Topcoat fork for local-first apps (public, fetched anonymously over
-# HTTPS). Pinned rev.
-hearth = { git = "https://github.com/wbunting/hearth.git", rev = "82875db6f13aa5f3f333bdfdbf68e97d3b04dff3" }
-topcoat = { git = "https://github.com/wbunting/hearth.git", rev = "82875db6f13aa5f3f333bdfdbf68e97d3b04dff3", features = ["tailwind"] }
+# hearth: published on crates.io (https://github.com/wbunting/hearth,
+# https://usehearth.dev). The server uses the facade crate only.
+hearth = { version = "0.1.0", features = ["tailwind"] }
 toasty = { version = "0.11", features = ["sqlite", "migration"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "signal"] }
 serde = { version = "1", features = ["derive"] }
@@ -35,7 +34,7 @@ ring = "0.17"
 form_urlencoded = "1"
 
 [build-dependencies]
-topcoat = { git = "https://github.com/wbunting/hearth.git", rev = "82875db6f13aa5f3f333bdfdbf68e97d3b04dff3", default-features = false, features = ["tailwind"] }
+hearth = { version = "0.1.0", default-features = false, features = ["tailwind"] }
 
 [dev-dependencies]
 aes-gcm = "0.10"

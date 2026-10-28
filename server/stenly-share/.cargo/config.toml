@@ -1,3 +1,0 @@
-[net]
-# Fetch git dependencies (hearth, over anonymous HTTPS) with the git CLI.
-git-fetch-with-cli = true

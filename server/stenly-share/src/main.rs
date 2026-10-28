@@ -41,5 +41,5 @@ async fn run() -> Result<(), String> {
         if cfg.upload_token.is_some() { "required" } else { "not required" },
         cfg.oidc.as_ref().map_or_else(|| "none".to_owned(), |o| format!("oidc ({})", o.issuer)),
     );
-    topcoat::start(build_router(cfg, db, assets, limiter, policy)).await.map_err(|e| e.to_string())
+    hearth::start(build_router(cfg, db, assets, limiter, policy)).await.map_err(|e| e.to_string())
 }

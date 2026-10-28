@@ -3,7 +3,7 @@
 //! stores ciphertext (plus size and timestamps) and serves a viewer that
 //! decrypts in the browser with the key from the URL fragment.
 //!
-//! Built on hearth (a Topcoat fork). See `server/README.md` for self-hosting.
+//! Built on hearth (https://usehearth.dev). See `server/README.md` for self-hosting.
 
 pub mod api;
 pub mod app;
@@ -19,7 +19,7 @@ pub mod tables;
 
 use std::sync::Arc;
 
-use topcoat::{asset::AssetBundle, router::Router};
+use hearth::{asset::AssetBundle, router::Router};
 
 /// App-context wrapper so the sweeper and handlers share one limiter.
 pub struct ArcLimiter(pub Arc<api::RateLimiter>);
@@ -44,5 +44,5 @@ pub fn load_assets() -> Result<AssetBundle, String> {
         Ok(dir) => AssetBundle::load_dir(&dir),
         Err(_) => AssetBundle::load(),
     }
-    .map_err(|e| format!("loading the asset bundle (run `topcoat asset bundle`, or set STENLY_SHARE_ASSETS_DIR): {e}"))
+    .map_err(|e| format!("loading the asset bundle (run `hearth asset bundle`, or set STENLY_SHARE_ASSETS_DIR): {e}"))
 }
