@@ -40,7 +40,7 @@ pub fn open(controller: Entity<Controller>, cx: &mut App) -> Option<WindowHandle
     // A Dock icon while setting up: system permission prompts otherwise leave
     // an accessory app stranded behind other windows.
     controller.read(cx).shell.set_foreground_app();
-    let bounds = Bounds::centered(None, size(px(720.), px(620.)), cx);
+    let bounds = Bounds::centered(None, size(px(720.), px(720.)), cx);
     let h = cx
         .open_window(
             WindowOptions {
