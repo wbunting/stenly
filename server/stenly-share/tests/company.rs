@@ -17,14 +17,14 @@ use stenly_share::{
     policy::Policy,
     share, store,
 };
-use topcoat::router::{Body, Method, RemoteAddr, Router, StatusCode, to_bytes};
+use hearth::router::{Body, Method, RemoteAddr, Router, StatusCode, to_bytes};
 
 const VECTOR: &str = "AaChoqOkpaanqKmqq506Cg9_-i6dFgzzv2JY-vwkySpkssQ2DfJqU_Zdh1dsswQsm8BVPR9lvifoXR_wjWdoMikMtG8OHTBXMIlQ1tjdzKUGRIeZOWidVgcd55Jbwe3HNthABw";
 
 #[derive(Debug)]
 struct Res {
     status: StatusCode,
-    headers: topcoat::router::HeaderMap,
+    headers: hearth::router::HeaderMap,
     body: Vec<u8>,
 }
 impl Res {
@@ -44,7 +44,7 @@ async fn start_idp() -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let issuer = format!("http://{}", listener.local_addr().unwrap());
     let router = stenly_share::dev_idp::router(issuer.clone(), "client".into(), "secret".into());
-    tokio::spawn(async move { topcoat::serve_until(listener, router, std::future::pending()).await.unwrap() });
+    tokio::spawn(async move { hearth::serve_until(listener, router, std::future::pending()).await.unwrap() });
     issuer
 }
 

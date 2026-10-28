@@ -14,5 +14,5 @@ async fn main() {
     let router = stenly_share::dev_idp::router(issuer.clone(), env("DEV_IDP_CLIENT_ID", "stenly-share"), env("DEV_IDP_CLIENT_SECRET", "dev-secret"));
     eprintln!("dev-idp: issuer {issuer} (NOT FOR PRODUCTION)");
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", port)).await.expect("bind");
-    topcoat::serve(listener, router).await.expect("serve");
+    hearth::serve(listener, router).await.expect("serve");
 }

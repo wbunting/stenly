@@ -21,7 +21,7 @@ use ring::{
     signature::{ECDSA_P256_SHA256_FIXED_SIGNING, EcdsaKeyPair, KeyPair},
 };
 use serde_json::json;
-use topcoat::{
+use hearth::{
     context::{Cx, app_context},
     router::{
         Body, HeaderValue, Method, RouteFn, RouteFuture, Router, StatusCode, header,
@@ -105,7 +105,7 @@ fn authorize(cx: &Cx, body: Body) -> RouteFuture<'_> {
     Box::pin(async move {
         let idp = app_context::<Arc<Idp>>(cx);
         let mut q = query(cx);
-        if topcoat::router::request::method(cx) == Method::POST {
+        if hearth::router::request::method(cx) == Method::POST {
             let b = Bytes::from_request(cx, body).await?;
             q.extend(form(std::str::from_utf8(&b).unwrap_or("")));
         }
@@ -113,7 +113,7 @@ fn authorize(cx: &Cx, body: Body) -> RouteFuture<'_> {
         if get("client_id") != idp.client_id || get("response_type") != "code" || get("code_challenge_method") != "S256" {
             return Ok(respond(StatusCode::BAD_REQUEST, "text/plain", "dev-idp: bad client_id / response_type / PKCE".into()));
         }
-        if topcoat::router::request::method(cx) != Method::POST || get("email").is_empty() {
+        if hearth::router::request::method(cx) != Method::POST || get("email").is_empty() {
             let hidden: String = ["client_id", "redirect_uri", "response_type", "scope", "state", "nonce", "code_challenge", "code_challenge_method"]
                 .iter()
                 .map(|k| format!(r#"<input type="hidden" name="{k}" value="{}">"#, esc(&get(k))))
@@ -135,7 +135,7 @@ fn authorize(cx: &Cx, body: Body) -> RouteFuture<'_> {
         let sep = if redirect.contains('?') { '&' } else { '?' };
         let loc = format!("{redirect}{sep}code={code}&state={}", crate::share::urlencode(&get("state")));
         let mut r = respond(StatusCode::SEE_OTHER, "text/plain", String::new());
-        r.headers_mut().insert(header::LOCATION, HeaderValue::from_str(&loc).map_err(topcoat::router::error::internal_server_error)?);
+        r.headers_mut().insert(header::LOCATION, HeaderValue::from_str(&loc).map_err(hearth::router::error::internal_server_error)?);
         Ok(r)
     })
 }
@@ -160,7 +160,7 @@ fn token(cx: &Cx, body: Body) -> RouteFuture<'_> {
         let h = share::b64(br#"{"alg":"ES256","kid":"dev","typ":"JWT"}"#);
         let p = share::b64(claims.to_string().as_bytes());
         let sig =
-            idp.key.sign(&idp.rng, format!("{h}.{p}").as_bytes()).map_err(|_| topcoat::router::error::internal_server_error(std::io::Error::other("sign")))?;
+            idp.key.sign(&idp.rng, format!("{h}.{p}").as_bytes()).map_err(|_| hearth::router::error::internal_server_error(std::io::Error::other("sign")))?;
         Ok(json_res(
             StatusCode::OK,
             json!({"access_token": share::b64(&share::random::<24>()), "token_type": "Bearer", "expires_in": 300, "id_token": format!("{h}.{p}.{}", share::b64(sig.as_ref()))}),
@@ -180,7 +180,7 @@ pub fn router(issuer: String, client_id: String, client_secret: String) -> Route
         .route(RouteFn::new(&[Method::GET, Method::POST][..], "/authorize", authorize))
         .route(RouteFn::new(Method::POST, "/token", token))
         // Its own sign-in form posts back to itself; nothing to protect.
-        .origin_policy(topcoat::router::OriginPolicy::dangerous_disable())
+        .origin_policy(hearth::router::OriginPolicy::dangerous_disable())
         .app_context(idp)
         .build()
 }

@@ -1,7 +1,7 @@
 //! Integration tests: the full router (routes, layers, assets, SQLite) driven
 //! in-process through `Router::handle`.
 //!
-//! Needs the asset bundle for the viewer page: `topcoat asset bundle --release`
+//! Needs the asset bundle for the viewer page: `hearth asset bundle --release`
 //! for release tests (or set `STENLY_SHARE_ASSETS_DIR`).
 
 mod common;
@@ -10,7 +10,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use serde_json::{Value, json};
 use stenly_share::{api::RateLimiter, build_router, config::Config, policy::Policy, share, store};
-use topcoat::router::{Body, Method, RemoteAddr, Router, StatusCode, to_bytes};
+use hearth::router::{Body, Method, RemoteAddr, Router, StatusCode, to_bytes};
 
 const VECTOR: &str = "AaChoqOkpaanqKmqq506Cg9_-i6dFgzzv2JY-vwkySpkssQ2DfJqU_Zdh1dsswQsm8BVPR9lvifoXR_wjWdoMikMtG8OHTBXMIlQ1tjdzKUGRIeZOWidVgcd55Jbwe3HNthABw";
 
@@ -44,7 +44,7 @@ async fn app() -> App {
 
 struct Res {
     status: StatusCode,
-    headers: topcoat::router::HeaderMap,
+    headers: hearth::router::HeaderMap,
     body: Vec<u8>,
 }
 

@@ -71,7 +71,7 @@ pub struct User {
     pub last_login_at: i64,
 }
 
-/// Login session; stores only the token hash (see `topcoat::session`).
+/// Login session; stores only the token hash (see `hearth::session`).
 #[derive(Debug, Clone, toasty::Model)]
 #[table = "sessions"]
 pub struct Session {

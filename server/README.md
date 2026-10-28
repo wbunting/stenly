@@ -17,7 +17,7 @@ Notes are **end-to-end encrypted**. The Stenly app encrypts each note on your co
 
 ### Build the image
 
-The server is written in Rust on [hearth](https://github.com/wbunting/hearth) (a fork of Topcoat). hearth is a public repository, fetched anonymously over HTTPS at the revision pinned in `Cargo.toml`, so no credentials are needed:
+The server is written in Rust on [hearth](https://usehearth.dev) ([source](https://github.com/wbunting/hearth)). The `hearth` crate and the `hearth-cli` asset bundler are published on crates.io at the versions pinned in `Cargo.toml` and the Dockerfile, so no credentials are needed:
 
 ```sh
 cd server/stenly-share
@@ -55,8 +55,8 @@ Point the domain's DNS at the host and open ports 80 and 443 first.
 
 ```sh
 cd server/stenly-share                 # rust-toolchain.toml pins rustc 1.99.1
-cargo install --locked --git https://github.com/wbunting/hearth.git --rev 82875db6f13aa5f3f333bdfdbf68e97d3b04dff3 topcoat-cli
-cargo build --release && topcoat asset bundle --release --bin stenly-share
+cargo install --locked hearth-cli --version =0.1.0
+cargo build --release && hearth asset bundle --release --bin stenly-share
 STENLY_SHARE_DATA_DIR=/var/lib/stenly-share PORT=8080 HOST=0.0.0.0 target/release/stenly-share
 ```
 
@@ -166,13 +166,13 @@ It also sees ordinary request metadata: IP addresses, kept in memory for rate li
 
 **Company mode** adds what the server needs for sign-in: user records (email and name), hashed session and personal-token records, and which user uploaded each share. It still never has a key.
 
-**Viewer hardening.** The viewer page uses a strict Content-Security-Policy: same-origin scripts, styles, fonts and requests only. It has no inline scripts, no `eval` and no third-party code, and it can't be framed. The note's Markdown is rendered into DOM nodes as text, never as HTML. Links are limited to `http(s)` and `mailto`. The company-mode admin pages run the hearth/Topcoat runtime, which needs `'unsafe-eval'`. They get that looser policy only on `/admin` and `/account`, and those pages never see keys or decrypted notes.
+**Viewer hardening.** The viewer page uses a strict Content-Security-Policy: same-origin scripts, styles, fonts and requests only. It has no inline scripts, no `eval` and no third-party code, and it can't be framed. The note's Markdown is rendered into DOM nodes as text, never as HTML. Links are limited to `http(s)` and `mailto`. The company-mode admin pages run the hearth runtime, which needs `'unsafe-eval'`. They get that looser policy only on `/admin` and `/account`, and those pages never see keys or decrypted notes.
 
 **What this protects against.** A compromised or curious server operator, a database leak or a backup leak reveals no note contents. A stolen backup reveals only the metadata listed above.
 
 **What it doesn't protect against.**
 - Anyone holding the full link can read the note. Treat links like passwords.
-- An operator who serves malicious JavaScript in the viewer could steal keys from the people who open links on that server. This is inherent to any web viewer that decrypts in the browser, and it's why companies may prefer to self-host. To audit the code, check `web/viewer.js` in this repo against what your server serves at `/_topcoat/assets/viewer-*.js`.
+- An operator who serves malicious JavaScript in the viewer could steal keys from the people who open links on that server. This is inherent to any web viewer that decrypts in the browser, and it's why companies may prefer to self-host. To audit the code, check `web/viewer.js` in this repo against what your server serves at `/_hearth/assets/viewer-*.js`.
 
 **Revocation and expiry.** Revoking deletes the ciphertext immediately. Expired ciphertext is deleted by the sweeper within `STENLY_SHARE_SWEEP_SECS`. Both then answer `410` until the tombstone period ends. Each re-share of a meeting replaces the ciphertext in place and keeps the link and key. A new share gets a new key.
 
@@ -212,7 +212,7 @@ The envelope is `[0x01][12-byte nonce][AES-256-GCM ciphertext || tag]`, with AAD
 
 ```sh
 cd server/stenly-share
-cargo build && topcoat asset bundle --bin stenly-share   # topcoat-cli 0.10.0
+cargo build && hearth asset bundle --bin stenly-share   # hearth-cli 0.1.0
 STENLY_SHARE_DATA_DIR=/tmp/ss PORT=8788 target/debug/stenly-share
 node scripts/share-note.mjs http://127.0.0.1:8788      # encrypts a sample note, prints url#key
 ```
@@ -220,16 +220,15 @@ node scripts/share-note.mjs http://127.0.0.1:8788      # encrypts a sample note,
 Tests:
 
 ```sh
-cargo test                     # contract test vector, API + company-mode integration tests (needs the asset bundle: `topcoat asset bundle --bin stenly-share`)
+cargo test                     # contract test vector, API + company-mode integration tests (needs the asset bundle: `hearth asset bundle --bin stenly-share`)
 node --test web/viewer.test.mjs  # browser-side decrypt of the test vector (WebCrypto), Markdown renderer
 ```
 
 To work against a local hearth checkout, add a patch to `Cargo.toml` and don't commit it:
 
 ```toml
-[patch."https://github.com/wbunting/hearth.git"]
+[patch.crates-io]
 hearth = { path = "../../../hearth/crates/hearth" }
-topcoat = { path = "../../../hearth/crates/topcoat" }
 ```
 
 ### Layout

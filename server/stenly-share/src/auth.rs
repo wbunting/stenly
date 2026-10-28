@@ -12,7 +12,7 @@ use std::{
     time::{Duration, UNIX_EPOCH},
 };
 
-use topcoat::{
+use hearth::{
     context::{Cx, app_context, memoize},
     router::{StatusCode, request::headers},
     session,
@@ -32,7 +32,7 @@ pub const SESSION_LIFETIME: Duration = Duration::from_secs(14 * 86_400);
 
 /// The current user, if a valid session cookie came with the request.
 #[memoize(as_ref)]
-pub async fn current_user(cx: &Cx) -> topcoat::Result<Option<User>> {
+pub async fn current_user(cx: &Cx) -> hearth::Result<Option<User>> {
     if !app_context::<Config>(cx).company_mode() {
         return Ok(None);
     }
@@ -52,7 +52,7 @@ pub async fn current_user(cx: &Cx) -> topcoat::Result<Option<User>> {
 
 /// The signed-in user. Database errors propagate (5xx) rather than
 /// looking like "signed out".
-pub async fn user(cx: &Cx) -> topcoat::Result<Option<User>> {
+pub async fn user(cx: &Cx) -> hearth::Result<Option<User>> {
     current_user(cx).await.cloned().map_err(Clone::clone)
 }
 
@@ -203,7 +203,7 @@ pub async fn sign_in(cx: &Cx, id: &oidc::Identity) -> ApiResult<User> {
     Ok(user)
 }
 
-pub async fn sign_out(cx: &Cx) -> topcoat::Result<()> {
+pub async fn sign_out(cx: &Cx) -> hearth::Result<()> {
     if let Some(hash) = session::stop(cx).await? {
         Session::filter_by_token_hash(hash.to_vec()).delete().exec(&mut hearth::db(cx)).await?;
     }

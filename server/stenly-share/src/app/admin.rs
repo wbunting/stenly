@@ -3,7 +3,7 @@
 //! note contents: only the metadata in `ShareRow`.
 
 use hearth::{live_query, table_handle};
-use topcoat::{
+use hearth::{
     Result,
     context::{Cx, app_context},
     cookie::{Cookie, Cookies, SameSite, cookies, time},
@@ -44,7 +44,7 @@ pub struct AdminShare {
 #[page("/admin")]
 async fn admin(cx: &Cx) -> Result<impl View> {
     let Some(me) = auth::user(cx).await? else {
-        return Err(topcoat::router::error::redirect(sign_in_url("/admin")).into());
+        return Err(hearth::router::error::redirect(sign_in_url("/admin")).into());
     };
     if !me.admin {
         return Ok(view! {
@@ -171,7 +171,7 @@ async fn stat(label: &'static str, value: String) -> Result<impl View> {
 
 /// Admin layout: same masthead, a nav, and the hearth runtime.
 #[component]
-pub async fn admin_shell(me: User, #[default] child: topcoat::view::Child<'_>) -> Result<impl View> {
+pub async fn admin_shell(me: User, #[default] child: hearth::view::Child<'_>) -> Result<impl View> {
     Ok(view! {
         <!DOCTYPE html>
         <html lang="en">
@@ -181,12 +181,12 @@ pub async fn admin_shell(me: User, #[default] child: topcoat::view::Child<'_>) -
                 <meta name="robots" content="noindex, nofollow">
                 <title>"Admin · Stenly share"</title>
                 <link rel="icon" type="image/svg+xml" href=(crate::app::FAVICON)>
-                topcoat::font::link(font: crate::app::DM_SANS)
-                topcoat::font::link(font: crate::app::INSTRUMENT_SERIF)
+                hearth::font::link(font: crate::app::DM_SANS)
+                hearth::font::link(font: crate::app::INSTRUMENT_SERIF)
                 <link rel="stylesheet" href=(crate::app::STYLES)>
-                topcoat::runtime::script()
+                hearth::runtime::script()
                 <script type="module" src=(crate::app::ADMIN_JS)></script>
-                topcoat::dev::script()
+                hearth::dev::script()
             </head>
             <body>
                 <div class="page page-wide">
@@ -217,10 +217,10 @@ struct SettingsForm {
 #[route(POST "/admin/settings")]
 async fn save_settings(cx: &Cx, Form(f): Form<SettingsForm>) -> Result<SeeOther> {
     require_admin(cx).await?;
-    let domains = policy::parse_domains(&f.allowed_email_domains).map_err(topcoat::router::error::bad_request)?;
+    let domains = policy::parse_domains(&f.allowed_email_domains).map_err(hearth::router::error::bad_request)?;
     let new = policy::Policy { default_ttl_days: f.default_ttl_days, max_bytes: f.max_kib.saturating_mul(1024), allowed_email_domains: domains };
     let cfg = app_context::<Config>(cx);
-    policy::save(&mut hearth::db(cx), cfg, app_context::<PolicyCell>(cx), new).await.map_err(topcoat::router::error::bad_request)?;
+    policy::save(&mut hearth::db(cx), cfg, app_context::<PolicyCell>(cx), new).await.map_err(hearth::router::error::bad_request)?;
     Ok(see_other("/admin"))
 }
 
@@ -280,7 +280,7 @@ fn human_bytes(n: i64) -> String {
 }
 
 /// Two-series bar chart (shares created, views) as static SVG.
-fn spark(created: &[(i64, i64)], views: &[(i64, i64)]) -> topcoat::view::Unescaped<String> {
+fn spark(created: &[(i64, i64)], views: &[(i64, i64)]) -> hearth::view::Unescaped<String> {
     let max = created.iter().chain(views).map(|(_, n)| *n).max().unwrap_or(0).max(1) as f64;
     let (w, h, bw) = (560.0, 96.0, 40.0);
     let mut s = format!(r#"<svg class="spark" viewBox="0 0 {w} {}" role="img" aria-label="Shares created and views per day, last 14 days">"#, h + 18.0);
@@ -300,7 +300,7 @@ fn spark(created: &[(i64, i64)], views: &[(i64, i64)]) -> topcoat::view::Unescap
         ));
     }
     s.push_str(r##"</svg><p class="admin-note"><span class="key key-ink"></span>shares created <span class="key key-lime"></span>views</p>"##);
-    topcoat::view::Unescaped::new_unchecked(s)
+    hearth::view::Unescaped::new_unchecked(s)
 }
 
 // ---------------------------------------------------------------- personal upload tokens
@@ -308,7 +308,7 @@ fn spark(created: &[(i64, i64)], views: &[(i64, i64)]) -> topcoat::view::Unescap
 #[page("/account")]
 async fn account(cx: &Cx) -> Result<impl View> {
     let Some(me) = auth::user(cx).await? else {
-        return Err(topcoat::router::error::redirect(sign_in_url("/account")).into());
+        return Err(hearth::router::error::redirect(sign_in_url("/account")).into());
     };
     let mut tokens = UploadToken::filter_by_user_id(me.id.clone()).exec(&mut hearth::db(cx)).await?;
     tokens.sort_by_key(|t| -t.created_at);
@@ -356,10 +356,10 @@ struct NewToken {
 
 #[route(POST "/account/tokens")]
 async fn create_token(cx: &Cx, Form(f): Form<NewToken>) -> Result<SeeOther> {
-    let me = auth::user(cx).await?.ok_or_else(topcoat::router::error::forbidden)?;
+    let me = auth::user(cx).await?.ok_or_else(hearth::router::error::forbidden)?;
     let label: String = f.label.chars().filter(|c| !c.is_control()).take(60).collect::<String>().trim().to_owned();
     if label.is_empty() {
-        return Err(topcoat::router::error::bad_request("label is required").into());
+        return Err(hearth::router::error::bad_request("label is required").into());
     }
     let token = format!("ssu_{}", share::new_owner_token());
     toasty::create!(UploadToken {
@@ -392,7 +392,7 @@ struct DeleteToken {
 
 #[route(POST "/account/tokens/delete")]
 async fn delete_token(cx: &Cx, Form(f): Form<DeleteToken>) -> Result<SeeOther> {
-    let me = auth::user(cx).await?.ok_or_else(topcoat::router::error::forbidden)?;
+    let me = auth::user(cx).await?.ok_or_else(hearth::router::error::forbidden)?;
     let mut db = hearth::db(cx);
     if let Some(t) = UploadToken::filter_by_id(f.id).first().exec(&mut db).await?
         && t.user_id == me.id

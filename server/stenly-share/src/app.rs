@@ -4,7 +4,7 @@ pub mod admin;
 pub mod signin;
 pub mod v1;
 
-use topcoat::{
+use hearth::{
     Result,
     asset::{Asset, AssetBundle, RouterBuilderAssetExt, asset},
     context::{Cx, app_context},
@@ -22,7 +22,7 @@ use topcoat::{
 
 use crate::{api::Bucket, auth, config::Config, model::State, share, store};
 
-pub const STYLES: Asset = topcoat::tailwind::stylesheet!();
+pub const STYLES: Asset = hearth::tailwind::stylesheet!();
 pub const VIEWER_JS: Asset = asset!("web/viewer.js", rename: "viewer");
 pub const FAVICON: Asset = asset!("assets/favicon.svg");
 /// Admin page helpers (local times), loaded only on `/admin` and `/account`.
@@ -51,8 +51,8 @@ pub fn router(cfg: &Config, assets: AssetBundle) -> RouterBuilder {
         .assets(assets)
         .cookies()
         .sessions(SessionConfig::builder().lifetime(auth::SESSION_LIFETIME).build())
-        .layer(topcoat::router::LayerFn::new(None::<&str>, security_headers))
-        // The hearth/Topcoat runtime powers the admin's live tables.
+        .layer(hearth::router::LayerFn::new(None::<&str>, security_headers))
+        // The hearth runtime powers the admin's live tables.
         .runtime();
     if !cfg.trusted_proxies.is_empty() {
         b = b.trusted_proxies(TrustedProxies::new().networks(cfg.trusted_proxies.clone()));
@@ -72,11 +72,11 @@ const ADMIN_CSP: &str = AUTH_CSP;
 /// Sign-in pages: like the viewer, plus a same-origin form post (logout).
 const AUTH_CSP: &str = "default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 
-fn security_headers<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> topcoat::router::LayerFuture<'a> {
+fn security_headers<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> hearth::router::LayerFuture<'a> {
     Box::pin(async move {
         let mut res = match next.run(cx, body).await {
             Ok(r) => r,
-            Err(e) => topcoat::router::response::IntoResponse::into_response(e, cx)?,
+            Err(e) => hearth::router::response::IntoResponse::into_response(e, cx)?,
         };
         let h = res.headers_mut();
         h.insert(header::REFERRER_POLICY, HeaderValue::from_static("no-referrer"));
@@ -89,7 +89,7 @@ fn security_headers<'a>(cx: &'a Cx, body: Body, next: Next<'a>) -> topcoat::rout
         );
         let html = h.get(header::CONTENT_TYPE).is_some_and(|v| v.as_bytes().starts_with(b"text/html"));
         if html {
-            let path = topcoat::router::request::uri(cx).path();
+            let path = hearth::router::request::uri(cx).path();
             let csp = if path.starts_with("/admin") || path.starts_with("/account") {
                 ADMIN_CSP
             } else if path.starts_with("/auth") {
@@ -116,8 +116,8 @@ async fn healthz(cx: &Cx) -> Result<Response> {
 // ---------------------------------------------------------------- pages
 
 /// Shared `<head>` + page chrome (masthead and colophon).
-#[topcoat::view::component]
-pub async fn shell(cx: &Cx, title: String, description: String, #[default] child: topcoat::view::Child<'_>) -> Result<impl View> {
+#[hearth::view::component]
+pub async fn shell(cx: &Cx, title: String, description: String, #[default] child: hearth::view::Child<'_>) -> Result<impl View> {
     // Link previews only ever see the generic title or the sharer's opt-in
     // plaintext title; never note contents.
     let _ = cx;
@@ -140,10 +140,10 @@ pub async fn shell(cx: &Cx, title: String, description: String, #[default] child
                 <meta name="twitter:card" content="summary">
                 <meta name="twitter:title" content=(&title)>
                 <link rel="icon" type="image/svg+xml" href=(FAVICON)>
-                topcoat::font::link(font: DM_SANS)
-                topcoat::font::link(font: INSTRUMENT_SERIF)
+                hearth::font::link(font: DM_SANS)
+                hearth::font::link(font: INSTRUMENT_SERIF)
                 <link rel="stylesheet" href=(STYLES)>
-                topcoat::dev::script()
+                hearth::dev::script()
             </head>
             <body>
                 <div class="page">
@@ -165,9 +165,9 @@ pub async fn shell(cx: &Cx, title: String, description: String, #[default] child
     })
 }
 
-pub fn logo_svg() -> topcoat::view::Unescaped<&'static str> {
+pub fn logo_svg() -> hearth::view::Unescaped<&'static str> {
     // Static, trusted markup: the waveform mark from the app icon.
-    topcoat::view::Unescaped::new_unchecked(
+    hearth::view::Unescaped::new_unchecked(
         r#"<svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M8 18v4m6-11v18m6-24v30m6-22v14m6-9v4"/></svg>"#,
     )
 }
@@ -234,7 +234,7 @@ async fn viewer(cx: &Cx) -> Result<impl View> {
     .boxed())
 }
 
-pub fn state_page(cx: &Cx, status: StatusCode, code: &'static str, heading: &'static str, body: &'static str) -> topcoat::view::BoxView<'static> {
+pub fn state_page(cx: &Cx, status: StatusCode, code: &'static str, heading: &'static str, body: &'static str) -> hearth::view::BoxView<'static> {
     view! { cx =>
         (status)
         shell(title: format!("{heading} · Stenly"), description: "Private meeting notes shared from Stenly.".to_owned(),
@@ -284,7 +284,7 @@ pub fn sign_in_url(return_to: &str) -> String {
 /// The viewer's "sign in first" state (company mode). `viewer.js` stashes
 /// the fragment key in sessionStorage before leaving, and restores it on
 /// return, since IdP redirects drop fragments.
-fn sign_in_required(cx: &Cx, return_to: &str) -> topcoat::view::BoxView<'static> {
+fn sign_in_required(cx: &Cx, return_to: &str) -> hearth::view::BoxView<'static> {
     let href = sign_in_url(return_to);
     view! { cx =>
         (StatusCode::UNAUTHORIZED)

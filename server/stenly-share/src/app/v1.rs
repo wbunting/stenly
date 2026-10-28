@@ -1,7 +1,7 @@
 //! `/api/v1`: the share contract's HTTP API.
 
 use serde::Serialize;
-use topcoat::{
+use hearth::{
     Result,
     context::{Cx, app_context},
     router::{Body, StatusCode, path_param, response::Response, route},
@@ -185,6 +185,6 @@ async fn fetch_inner(cx: &Cx) -> ApiResult {
         StatusCode::OK,
         &Fetched { ciphertext: share::b64(&blob), title: s.title, created_at: share::rfc3339(s.created_at), expires_at: share::rfc3339(s.expires_at) },
     );
-    res.headers_mut().insert(topcoat::router::header::CACHE_CONTROL, topcoat::router::HeaderValue::from_static("no-store"));
+    res.headers_mut().insert(hearth::router::header::CACHE_CONTROL, hearth::router::HeaderValue::from_static("no-store"));
     Ok(res)
 }

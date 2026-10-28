@@ -11,7 +11,7 @@
 use hearth::Table;
 use serde::{Deserialize, Serialize};
 use toasty::stmt::Expr;
-use topcoat::{
+use hearth::{
     Result,
     context::Cx,
     router::error::{bad_request, forbidden, not_found, unauthorized},
@@ -90,7 +90,7 @@ async fn update_share(cx: &Cx, id: String, patch: ShareRowPatch) -> Result<Share
         if s.state(share::now()) == State::Revoked || s.purged {
             return Err(bad_request("this share is gone; its ciphertext was deleted").into());
         }
-        let cfg = topcoat::context::app_context::<crate::config::Config>(cx);
+        let cfg = hearth::context::app_context::<crate::config::Config>(cx);
         let now = share::now();
         if exp <= now || exp > now + cfg.max_ttl_days * DAY {
             return Err(bad_request(format!("expiry must be within the next {} days", cfg.max_ttl_days)).into());
