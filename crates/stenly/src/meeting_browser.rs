@@ -1,17 +1,12 @@
 //! Local meeting library. Disk reads run off the UI thread; only visible rows
-//! are rendered. Transcript/summary bodies are read only for search or opening.
-use crate::text_input::{InputEvent, TextInput};
+//! are rendered. Searching lives in the search palette (`search_palette.rs`).
 use crate::{theme, ui};
-use gpui::{
-    AnyElement, AsyncApp, Context, Entity, EventEmitter, Focusable, Subscription, Task, Window,
-    div, prelude::*, px,
-};
+use gpui::{AnyElement, AsyncApp, Context, EventEmitter, Task, Window, div, prelude::*, px};
 use std::path::PathBuf;
 use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
-use std::time::Duration;
 use stenly_core::config::Config;
 use stenly_mcp::store::Store;
 
@@ -31,54 +26,37 @@ struct Row {
 
 pub struct MeetingBrowser {
     config: Config,
-    query: Entity<TextInput>,
     rows: Vec<Row>,
     limit: usize,
     more: bool,
     loading: bool,
     task: Option<Task<()>>,
     cancelled: Arc<AtomicBool>,
-    _sub: Subscription,
 }
 
 impl EventEmitter<OpenMeeting> for MeetingBrowser {}
 
 impl MeetingBrowser {
     pub fn new(config: Config, cx: &mut Context<Self>) -> Self {
-        let query = cx.new(|cx| TextInput::new(cx, "Search title, attendees, notes or transcript"));
-        let sub = cx.subscribe(&query, |this: &mut Self, _, ev: &InputEvent, cx| {
-            if matches!(ev, InputEvent::Changed) {
-                this.limit = PAGE;
-                this.rows.clear();
-                this.load(true, cx);
-            }
-        });
         let mut this = Self {
             config,
-            query,
             rows: vec![],
             limit: PAGE,
             more: false,
             loading: true,
             task: None,
             cancelled: Arc::new(AtomicBool::new(false)),
-            _sub: sub,
         };
-        this.load(false, cx);
+        this.load(cx);
         this
     }
 
     pub fn refresh(&mut self, config: Config, cx: &mut Context<Self>) {
         self.config = config;
-        self.load(false, cx);
+        self.load(cx);
     }
 
-    pub fn focus_search(&self, window: &mut Window, cx: &mut Context<Self>) {
-        window.focus(&self.query.read(cx).focus_handle(cx), cx);
-    }
-
-    fn load(&mut self, debounce: bool, cx: &mut Context<Self>) {
-        let query = self.query.read(cx).text().trim().to_string();
+    fn load(&mut self, cx: &mut Context<Self>) {
         let config = self.config.clone();
         let limit = self.limit;
         self.cancelled.store(true, Ordering::Relaxed);
@@ -89,56 +67,30 @@ impl MeetingBrowser {
         // Dropping the old task cancels its delivery, so an older query cannot
         // overwrite newer results even if an iCloud read finishes much later.
         self.task = Some(cx.spawn(async move |this, cx: &mut AsyncApp| {
-            if debounce {
-                cx.background_executor()
-                    .timer(Duration::from_millis(220))
-                    .await;
-            }
             let rows = cx
                 .background_spawn(async move {
                     let store = Store::new(config);
-                    if query.is_empty() {
-                        store
-                            .meetings_cancellable(|| cancelled.load(Ordering::Relaxed))
-                            .into_iter()
-                            .take(limit + 1)
-                            .map(|m| Row {
-                                title: m.meta.title.clone(),
-                                detail: format!(
-                                    "{} · {}",
-                                    m.meta.started.format("%b %-d, %Y · %-I:%M %p"),
-                                    match m.meta.state {
-                                        stenly_core::session::SessionState::Done => "Note ready",
-                                        stenly_core::session::SessionState::Failed => "Failed",
-                                        stenly_core::session::SessionState::Recording =>
-                                            "Recording",
-                                        _ => "Processing",
-                                    }
-                                ),
-                                dir: m.dir,
-                                segment: None,
-                            })
-                            .collect::<Vec<_>>()
-                    } else {
-                        store
-                            .search_cancellable(&query, None, None, limit + 1, || {
-                                cancelled.load(Ordering::Relaxed)
-                            })
-                            .into_iter()
-                            .map(|h| Row {
-                                dir: store.audio_dir.join(h.meeting_id),
-                                title: h.title,
-                                detail: format!(
-                                    "{} · {}{} — {}",
-                                    h.date,
-                                    h.field,
-                                    h.at.map(|at| format!(" · {at}")).unwrap_or_default(),
-                                    h.text.replace('\n', " ")
-                                ),
-                                segment: h.segment_index,
-                            })
-                            .collect()
-                    }
+                    store
+                        .meetings_cancellable(|| cancelled.load(Ordering::Relaxed))
+                        .into_iter()
+                        .take(limit + 1)
+                        .map(|m| Row {
+                            title: m.meta.title.clone(),
+                            detail: format!(
+                                "{} · {}",
+                                m.meta.started.format("%b %-d, %Y · %-I:%M %p"),
+                                match m.meta.state {
+                                    stenly_core::session::SessionState::Done => "Note ready",
+                                    stenly_core::session::SessionState::Failed => "Failed",
+                                    stenly_core::session::SessionState::Recording =>
+                                        "Recording",
+                                    _ => "Processing",
+                                }
+                            ),
+                            dir: m.dir,
+                            segment: None,
+                        })
+                        .collect::<Vec<_>>()
                 })
                 .await;
             let _ = this.update(cx, |this, cx| {
@@ -160,13 +112,11 @@ impl Drop for MeetingBrowser {
 
 impl Render for MeetingBrowser {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
-        let searching = !self.query.read(cx).text().trim().is_empty();
         div()
             .w_full()
             .flex()
             .flex_col()
             .gap(px(10.))
-            .child(ui::text_field(self.query.clone()))
             .child(
                 div()
                     .flex()
@@ -177,53 +127,26 @@ impl Render for MeetingBrowser {
                         div()
                             .text_size(px(theme::SUBHEAD))
                             .text_color(theme::muted())
-                            .child(if self.loading {
-                                "Searching this Mac…".to_string()
-                            } else if self.rows.is_empty() {
-                                if searching {
-                                    "No matching meetings."
+                            .child(if self.rows.is_empty() {
+                                if self.loading {
+                                    "Loading meetings…"
                                 } else {
                                     "Notes from your meetings will appear here."
                                 }
                                 .to_string()
                             } else {
-                                format!(
-                                    "{} {}{}",
-                                    self.rows.len(),
-                                    if searching {
-                                        if self.rows.len() == 1 {
-                                            "match"
-                                        } else {
-                                            "matches"
-                                        }
-                                    } else {
-                                        "meetings"
-                                    },
-                                    if self.more { " shown" } else { "" }
-                                )
+                                format!("{} meetings{}", self.rows.len(), if self.more { " shown" } else { "" })
                             }),
                     )
                     .when(self.more && !self.loading, |d| {
                         d.child(
-                            ui::button(
-                                "more-meetings",
-                                if searching {
-                                    "Show more matches"
-                                } else {
-                                    "Show older meetings"
-                                },
-                                ui::Btn::Ghost,
-                            )
-                            .role(gpui::Role::Button)
-                            .aria_label(if searching {
-                                "Show more matches"
-                            } else {
-                                "Show older meetings"
-                            })
-                            .on_click(cx.listener(|this, _, _, cx| {
-                                this.limit += PAGE;
-                                this.load(false, cx);
-                            })),
+                            ui::button("more-meetings", "Show older meetings", ui::Btn::Ghost)
+                                .role(gpui::Role::Button)
+                                .aria_label("Show older meetings")
+                                .on_click(cx.listener(|this, _, _, cx| {
+                                    this.limit += PAGE;
+                                    this.load(cx);
+                                })),
                         )
                     }),
             )
