@@ -234,6 +234,9 @@ fn chat_json(target: &LlmTarget, system: &str, user: &str, timeout_secs: u64) ->
         return Ok(crate::cli_llm::run(spec, Some(system), user, timeout_secs.max(30))?);
     }
     anyhow::ensure!(!target.endpoint.is_empty() && !target.model.is_empty(), "no AI model set up");
+    if target.backend == crate::config::Backend::ChatGpt {
+        return crate::chatgpt::complete(target, Some(system), user, timeout_secs.max(30));
+    }
     let call = |json_mode: bool| -> Result<serde_json::Value, ureq::Error> {
         let mut req = ureq::post(&format!("{}/chat/completions", target.endpoint)).config().timeout_global(Some(std::time::Duration::from_secs(timeout_secs.max(30)))).build();
         if let Some(key) = &target.api_key {

@@ -334,6 +334,9 @@ pub fn run(cfg: &Config, target: &LlmTarget, recipe: &Entry, dir: &Path) -> Resu
 
 /// One chat completion, plain text out.
 pub fn chat(target: &LlmTarget, system: &str, user: &str, timeout_secs: u64) -> Result<String> {
+    if target.backend == crate::config::Backend::ChatGpt {
+        return Ok(clean_output(&crate::chatgpt::complete(target, Some(system), user, timeout_secs)?));
+    }
     if let Some(spec) = &target.cli {
         return Ok(clean_output(&crate::cli_llm::run(spec, Some(system), user, timeout_secs)?));
     }

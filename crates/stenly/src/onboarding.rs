@@ -425,6 +425,8 @@ impl Onboarding {
         let asr = stenly_asr::models::find(&cfg.asr.model).unwrap_or(&stenly_asr::models::MODELS[0]);
         let uses_api = cfg.llm.uses_api();
         let uses_cli = cfg.llm.uses_cli();
+        let uses_chatgpt = cfg.llm.uses_chatgpt();
+        let chatgpt = self.controller.read(cx).chatgpt.clone();
         let ctrl = self.controller.clone();
         let cli_tools = self.controller.read(cx).cli_tools.clone();
 
@@ -459,9 +461,25 @@ impl Onboarding {
         };
         let select_local = {
             let ctrl = ctrl.clone();
-            let other = uses_api || uses_cli;
+            let other = uses_api || uses_cli || uses_chatgpt;
             ui::button("ob-use-local", if other { "Use Local" } else { "Selected" }, if other { Btn::Outline } else { Btn::Ghost })
                 .when(other, |b| b.on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.set("llm.provider", "ollama", cx))))
+        };
+        // Sign in with ChatGPT: signing in also selects it
+        let select_chatgpt: AnyElement = {
+            use crate::controller::ChatGptState;
+            let ctrl = ctrl.clone();
+            match &chatgpt {
+                ChatGptState::SigningIn => ui::pending("ob-chatgpt-wait", "Waiting for browser…").into_any_element(),
+                ChatGptState::SignedIn(_) if uses_chatgpt => ui::button("ob-use-chatgpt", "Selected", Btn::Ghost).into_any_element(),
+                ChatGptState::SignedIn(_) => ui::button("ob-use-chatgpt", "Use ChatGPT", Btn::Outline).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.set("llm.provider", "chatgpt", cx))).into_any_element(),
+                _ => ui::button("ob-use-chatgpt", "Sign In", Btn::Outline).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.sign_in_chatgpt(cx))).into_any_element(),
+            }
+        };
+        let chatgpt_desc: gpui::SharedString = match &chatgpt {
+            crate::controller::ChatGptState::SignedIn(who) => format!("Signed in as {who}. Your plan pays; no API key.").into(),
+            crate::controller::ChatGptState::Failed(e) => e.clone().into(),
+            _ => "Your Plus or Pro plan pays; no API key.".into(),
         };
         let select_api = {
             let ctrl = ctrl.clone();
@@ -539,9 +557,11 @@ impl Onboarding {
             .child(ui::card(vec![
                 ui::row(Some(icons::SPARKLES), "Local · Ollama", Some("Summaries stay on this Mac.".into()), select_local).into_any_element(),
                 div().px(px(16.)).pb(px(12.)).child(local_detail).child(div().pt(px(8.)).child(local_action)).into_any_element(),
+                ui::row(Some(icons::LOCK), "Cloud · Sign in with ChatGPT", Some(chatgpt_desc), select_chatgpt).into_any_element(),
                 ui::row(Some(icons::LOCK), "Cloud · your API key", Some("Use an OpenAI-compatible provider.".into()), select_api).into_any_element(),
             ].into_iter().chain(cli_rows).collect()))
             .when_some(chosen_cli.filter(|_| uses_cli), |d, tool| d.child(div().px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).line_height(px(17.)).text_color(theme::muted()).child(tool.disclosure())))
+            .when(uses_chatgpt, |d| d.child(div().px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).line_height(px(17.)).text_color(theme::muted()).child("Your transcript is sent to OpenAI under your ChatGPT account to write the summary.")))
             .when(uses_api, |d| d.child(div().px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).line_height(px(17.)).text_color(theme::muted()).child("Your transcript is sent to this provider to write the summary.")).child(api_form))
             .child(div().px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child("You can turn on summaries later in Settings → Summaries."))
             .child(div().flex_1())

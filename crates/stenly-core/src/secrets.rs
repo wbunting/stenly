@@ -42,6 +42,32 @@ pub fn set_context_secret(account: &str, value: &str) -> anyhow::Result<()> {
     if value.trim().is_empty() { delete(CONTEXT_SERVICE, account) } else { set(CONTEXT_SERVICE, account, value.trim(), &format!("Stenly context ({account})")) }
 }
 
+/// ChatGPT sign-in (OAuth tokens as JSON, see `chatgpt`). One item per
+/// profile: an isolated profile (`STENLY_CONFIG`) never reads or replaces the
+/// sign-in of the user's everyday app.
+const CHATGPT_SERVICE: &str = "ai.stenly.chatgpt";
+
+fn chatgpt_account() -> String {
+    match std::env::var("STENLY_CONFIG") {
+        Ok(p) if !p.trim().is_empty() => {
+            use sha2::Digest;
+            let h = sha2::Sha256::digest(crate::config::config_path().to_string_lossy().as_bytes());
+            format!("profile-{}", h.iter().take(6).map(|b| format!("{b:02x}")).collect::<String>())
+        }
+        _ => ACCOUNT.to_string(),
+    }
+}
+
+pub fn chatgpt_tokens() -> Option<String> {
+    get(CHATGPT_SERVICE, &chatgpt_account())
+}
+
+/// Store (or with "" remove) the ChatGPT sign-in.
+pub fn set_chatgpt_tokens(json: &str) -> anyhow::Result<()> {
+    let account = chatgpt_account();
+    if json.trim().is_empty() { delete(CHATGPT_SERVICE, &account) } else { set(CHATGPT_SERVICE, &account, json.trim(), "Stenly ChatGPT sign-in") }
+}
+
 fn valid_account(a: &str) -> bool {
     !a.is_empty() && a.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }
@@ -76,6 +102,7 @@ fn file(service: &str, account: &str) -> std::path::PathBuf {
     match service {
         SERVICE => cfg.with_file_name("api-key"),
         CONTEXT_SERVICE => cfg.with_file_name("secrets").join(format!("context.{account}")),
+        CHATGPT_SERVICE => cfg.with_file_name("secrets").join("chatgpt"),
         _ => cfg.with_file_name("secrets").join(account),
     }
 }

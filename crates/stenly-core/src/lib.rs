@@ -7,6 +7,7 @@
 
 pub mod audio;
 pub mod calendar;
+pub mod chatgpt;
 pub mod cli_llm;
 pub mod config;
 pub mod context;

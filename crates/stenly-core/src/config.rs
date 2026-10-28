@@ -123,6 +123,7 @@ impl ContextConfig {
                 keep_alive: None,
                 local: false,
                 cli: None,
+                backend: Backend::OpenAi,
             },
             "api" => LlmConfig { provider: "api".into(), ..llm.clone() }.target(keychain),
             _ => llm.target(keychain),
@@ -366,8 +367,9 @@ pub struct AsrConfig {
 pub struct LlmConfig {
     pub enabled: bool,
     /// Which backend writes summaries: "ollama" (local, default), "api"
-    /// (any OpenAI-compatible service configured in `[llm.api]`) or "cli"
-    /// (an installed Codex / Claude Code, see `[llm.cli]`).
+    /// (any OpenAI-compatible service configured in `[llm.api]`), "cli"
+    /// (an installed Codex / Claude Code, see `[llm.cli]`) or "chatgpt"
+    /// (the user's ChatGPT plan, after signing in; see `[llm.chatgpt]`).
     pub provider: String,
     /// Any OpenAI-compatible endpoint (Ollama, llama.cpp, LM Studio, vLLM, ...).
     pub endpoint: String,
@@ -389,7 +391,36 @@ pub struct LlmConfig {
     pub api: ApiLlmConfig,
     /// The Codex / Claude Code command-line tool used when `provider = "cli"`.
     pub cli: CliLlmConfig,
+    /// The user's ChatGPT plan, used when `provider = "chatgpt"`.
+    pub chatgpt: ChatGptLlmConfig,
 }
+
+/// Summaries on the user's ChatGPT plan (Sign in with ChatGPT). The sign-in
+/// itself is kept in the Keychain, never here.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct ChatGptLlmConfig {
+    pub model: String,
+    /// "low" | "medium" | "high" ("" = the model's default).
+    pub reasoning_effort: String,
+}
+
+impl Default for ChatGptLlmConfig {
+    fn default() -> Self {
+        Self { model: crate::chatgpt::DEFAULT_MODEL.into(), reasoning_effort: crate::chatgpt::DEFAULT_EFFORT.into() }
+    }
+}
+
+/// The wire protocol a target speaks.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Backend {
+    /// OpenAI-compatible chat completions (Ollama, hosted APIs).
+    #[default]
+    OpenAi,
+    /// The ChatGPT backend's Responses API, with the signed-in account ([`crate::chatgpt`]).
+    ChatGpt,
+}
+
 
 /// Summaries through a coding-agent CLI the user is already signed in to.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -432,6 +463,8 @@ pub struct LlmTarget {
     pub local: bool,
     /// Set for `provider = "cli"`: run this tool instead of calling `endpoint`.
     pub cli: Option<crate::cli_llm::CliSpec>,
+    /// The wire protocol (chat completions, or the ChatGPT Responses API).
+    pub backend: Backend,
 }
 
 impl LlmConfig {
@@ -446,12 +479,31 @@ impl LlmConfig {
 
     /// Summaries are written by an Ollama-style server on this Mac (neither a hosted API nor a CLI).
     pub fn uses_ollama(&self) -> bool {
-        !self.uses_api() && !self.uses_cli()
+        !self.uses_api() && !self.uses_cli() && !self.uses_chatgpt()
+    }
+
+    pub fn uses_chatgpt(&self) -> bool {
+        self.provider.eq_ignore_ascii_case("chatgpt")
     }
 
     /// Resolve where summaries go. `keychain` supplies a stored key for the
     /// hosted provider when the config holds none.
     pub fn target(&self, keychain: impl FnOnce() -> Option<String>) -> LlmTarget {
+        if self.uses_chatgpt() {
+            let c = &self.chatgpt;
+            let model = Some(c.model.trim()).filter(|m| !m.is_empty()).unwrap_or(crate::chatgpt::DEFAULT_MODEL);
+            return LlmTarget {
+                endpoint: crate::chatgpt::BACKEND.into(),
+                model: model.to_string(),
+                // the signed-in account's token is fetched (and refreshed) per request
+                api_key: None,
+                reasoning_effort: c.reasoning_effort.trim().to_string(),
+                keep_alive: None,
+                local: false,
+                backend: Backend::ChatGpt,
+                cli: None,
+            };
+        }
         if self.uses_cli() {
             let c = &self.cli;
             // no tool chosen yet: the first one that is installed
@@ -467,6 +519,7 @@ impl LlmConfig {
                 keep_alive: None,
                 local: false,
                 cli: Some(crate::cli_llm::CliSpec { tool, path: c.path.trim().to_string(), model }),
+                backend: Backend::OpenAi,
             };
         }
         if self.uses_api() {
@@ -483,6 +536,7 @@ impl LlmConfig {
                 keep_alive: None,
                 local: false,
                 cli: None,
+                backend: Backend::OpenAi,
             }
         } else {
             LlmTarget {
@@ -493,6 +547,7 @@ impl LlmConfig {
                 keep_alive: Some(self.keep_alive.clone()).filter(|s| !s.is_empty()),
                 local: true,
                 cli: None,
+                backend: Backend::OpenAi,
             }
         }
     }
@@ -581,6 +636,7 @@ impl Default for LlmConfig {
             language: String::new(),
             api: ApiLlmConfig::default(),
             cli: CliLlmConfig::default(),
+            chatgpt: ChatGptLlmConfig::default(),
         }
     }
 }
@@ -856,8 +912,9 @@ speaker_names = true
 save_meeting_app_snapshots = false
 
 [llm]
-# Who writes summaries: "ollama" (on this Mac), "api" (a hosted model, see [llm.api]) or
-# "cli" (an installed Codex or Claude Code you're signed in to, see [llm.cli]).
+# Who writes summaries: "ollama" (on this Mac), "api" (a hosted model, see [llm.api]),
+# "cli" (an installed Codex or Claude Code you're signed in to, see [llm.cli]) or
+# "chatgpt" (your ChatGPT plan, after Sign in with ChatGPT; see [llm.chatgpt]).
 # Pick a model in Settings → Summaries (Ollama models are downloaded for you).
 enabled = true
 provider = "ollama"
@@ -899,6 +956,13 @@ tool = ""
 path = ""
 # model name for the tool ("" = the tool's own default)
 model = ""
+
+[llm.chatgpt]
+# Used when provider = "chatgpt". Sign in from Settings → Summaries; your ChatGPT
+# plan pays and your transcript is sent to OpenAI under your account.
+model = "gpt-6.1-sol"
+# low | medium | high ("" = the model's default)
+reasoning_effort = "low"
 
 [templates]
 # Note templates and recipes are Markdown files in templates/ and recipes/ next to
@@ -1018,6 +1082,25 @@ mod tests {
         // meeting_apps isn't spelled out in the file; it falls back to the default.
         expected.detect.meeting_apps = parsed.detect.meeting_apps.clone();
         assert_eq!(parsed, expected);
+    }
+
+    #[test]
+    fn chatgpt_target_is_additive() {
+        let cfg: Config = toml::from_str("[llm]\nprovider = \"chatgpt\"\n").unwrap();
+        let t = cfg.llm.target(|| Some("sk-should-not-be-used".into()));
+        assert_eq!(t.backend, Backend::ChatGpt);
+        assert_eq!(t.model, crate::chatgpt::DEFAULT_MODEL);
+        assert_eq!(t.api_key, None);
+        assert!(!t.local);
+        // the context agent's "summary" target follows it
+        assert_eq!(cfg.context.target(&cfg.llm, || None).backend, Backend::ChatGpt);
+        // a custom model, and the other providers untouched
+        let cfg: Config = toml::from_str("[llm]\nprovider = \"chatgpt\"\n[llm.chatgpt]\nmodel = \"gpt-6-luna\"\n").unwrap();
+        assert_eq!(cfg.llm.target(|| None).model, "gpt-6-luna");
+        let api: Config = toml::from_str("[llm]\nprovider = \"api\"\n[llm.api]\nendpoint = \"https://x/v1\"\nmodel = \"m\"\n").unwrap();
+        assert_eq!(api.llm.target(|| Some("k".into())).backend, Backend::OpenAi);
+        assert_eq!(Config::default().llm.target(|| None).backend, Backend::OpenAi);
+        assert_eq!(api.context.target(&api.llm, || None).backend, Backend::OpenAi);
     }
 
     #[test]

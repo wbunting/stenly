@@ -2376,13 +2376,14 @@ impl MainWindow {
 
         let uses_api = cfg.llm.uses_api();
         let uses_cli = cfg.llm.uses_cli();
+        let uses_chatgpt = cfg.llm.uses_chatgpt();
         let cli_tool = stenly_core::cli_llm::Tool::parse(&cfg.llm.cli.tool);
         let (cli_found, cli_checked) = {
             let c = self.controller.read(cx);
             (c.cli_tools.iter().map(|d| d.tool).collect::<Vec<_>>(), c.cli_checked)
         };
-        // 0 Ollama, 1 API, 2 Codex, 3 Claude Code. A tool is offered when it is installed (or already chosen).
-        let source_now: u8 = if uses_cli { if cli_tool == Some(stenly_core::cli_llm::Tool::Claude) { 3 } else { 2 } } else if uses_api { 1 } else { 0 };
+        // 0 Ollama, 1 API, 2 Codex, 3 Claude Code, 4 ChatGPT. A tool is offered when it is installed (or already chosen).
+        let source_now: u8 = if uses_chatgpt { 4 } else if uses_cli { if cli_tool == Some(stenly_core::cli_llm::Tool::Claude) { 3 } else { 2 } } else if uses_api { 1 } else { 0 };
         let source_row = {
             let ctrl = self.controller.clone();
             use stenly_core::cli_llm::Tool;
@@ -2393,7 +2394,9 @@ impl MainWindow {
             if cli_found.contains(&Tool::Claude) || source_now == 3 {
                 opts.push((3, "Claude Code (Anthropic)"));
             }
+            opts.push((4, "ChatGPT (your plan)"));
             let desc: SharedString = match source_now {
+                4 => "Your ChatGPT plan. Your transcript is sent to OpenAI under your account; audio never leaves this Mac.".into(),
                 1 => "A hosted model. Your transcript is sent to it; audio never leaves this Mac.".into(),
                 2 | 3 => stenly_core::cli_llm::Tool::parse(&cfg.llm.cli.tool).unwrap_or(Tool::Codex).disclosure().into(),
                 _ => "A model running in Ollama on this Mac. Nothing leaves it.".into(),
@@ -2404,6 +2407,10 @@ impl MainWindow {
                 Some(desc),
                 ui::popup("llm-source", &opts, source_now, move |v, cx| {
                     ctrl.update(cx, |c, cx| match v {
+                        4 => {
+                            c.api_test = crate::controller::ApiTest::Idle;
+                            c.set("llm.provider", "chatgpt", cx)
+                        }
                         2 => c.use_cli_tool(Tool::Codex, cx),
                         3 => c.use_cli_tool(Tool::Claude, cx),
                         v => c.set("llm.provider", if v == 1 { "api" } else { "ollama" }, cx),
@@ -2415,6 +2422,7 @@ impl MainWindow {
 
         let api_card = uses_api.then(|| self.api_card(&cfg, cx));
         let cli_card = uses_cli.then(|| self.cli_card(&cfg, cli_checked, cx));
+        let chatgpt_card = uses_chatgpt.then(|| self.chatgpt_card(&cfg, cx));
         let jargon_card = self.jargon_card(&cfg);
 
         if asr {
@@ -2447,8 +2455,9 @@ impl MainWindow {
             .child(ui::card(vec![source_row]))
             .when_some(api_card, |d, card| d.child(ui::caption("API")).child(card))
             .when_some(cli_card, |d, card| d.child(ui::caption("Command-line tool")).child(card))
-            .when(!uses_api && !uses_cli, |d| d.child(ui::caption("Ollama")).child(ollama_banner).child(div().pt(px(if ollama.running { 0. } else { 8. })).child(ui::card(llm_cards))))
-            .when(!uses_api && !uses_cli && !extra.is_empty(), |d| {
+            .when_some(chatgpt_card, |d, card| d.child(ui::caption("ChatGPT")).child(card))
+            .when(!uses_api && !uses_cli && !uses_chatgpt, |d| d.child(ui::caption("Ollama")).child(ollama_banner).child(div().pt(px(if ollama.running { 0. } else { 8. })).child(ui::card(llm_cards))))
+            .when(!uses_api && !uses_cli && !uses_chatgpt && !extra.is_empty(), |d| {
                 let rows = extra
                     .into_iter()
                     .enumerate()
@@ -2620,6 +2629,88 @@ impl MainWindow {
             div().min_h(px(36.)).py(px(8.)).text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child(text).into_any_element()
         };
         ui::card(vec![preset_row, field_row("Base URL", self.api_endpoint.clone()), field_row("Model", self.api_model.clone()), key_row, test_row, score_row])
+    }
+
+    /// Sign in with ChatGPT: account, model, test, sign out.
+    fn chatgpt_card(&self, cfg: &stenly_core::config::Config, cx: &mut Context<Self>) -> gpui::Div {
+        use crate::controller::{ApiTest, ChatGptState};
+        let c = self.controller.read(cx);
+        let (state, test) = (c.chatgpt.clone(), c.api_test.clone());
+        let ctrl = self.controller.clone();
+        let (desc, action): (SharedString, AnyElement) = match &state {
+            ChatGptState::SignedIn(who) => (
+                format!("Signed in as {who}").into(),
+                {
+                    let ctrl = ctrl.clone();
+                    ui::button("chatgpt-out", "Sign Out", Btn::Ghost).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.sign_out_chatgpt(cx))).into_any_element()
+                },
+            ),
+            ChatGptState::SigningIn => (
+                "Finish signing in in your browser.".into(),
+                div()
+                    .flex()
+                    .items_center()
+                    .gap(px(8.))
+                    .child(ui::pending("chatgpt-wait", "Waiting…"))
+                    .child({
+                        let ctrl = ctrl.clone();
+                        ui::button("chatgpt-cancel", "Cancel", Btn::Ghost).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.cancel_chatgpt_sign_in(cx)))
+                    })
+                    .into_any_element(),
+            ),
+            ChatGptState::SignedOut | ChatGptState::Failed(_) => (
+                "Your Plus, Pro or Business plan pays for summaries. No API key.".into(),
+                {
+                    let ctrl = ctrl.clone();
+                    ui::button("chatgpt-in", "Sign in with ChatGPT", Btn::Primary).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.sign_in_chatgpt(cx))).into_any_element()
+                },
+            ),
+        };
+        let account_row = ui::row(None, "ChatGPT account", Some(desc), action).into_any_element();
+        let signed_in = matches!(state, ChatGptState::SignedIn(_));
+        // the default first; a model typed into config.toml shows as "Other"
+        const MODELS: &[&str] = &[stenly_core::chatgpt::DEFAULT_MODEL, "gpt-6-luna", "gpt-6-astra"];
+        let model = cfg.llm.target(|| None).model;
+        let cur = MODELS.iter().position(|m| *m == model).unwrap_or(MODELS.len());
+        let model_row = {
+            let ctrl = ctrl.clone();
+            let mut opts: Vec<(usize, &'static str)> = MODELS.iter().enumerate().map(|(i, m)| (i, *m)).collect();
+            if cur == MODELS.len() {
+                opts.push((cur, "Other"));
+            }
+            ui::row(
+                None,
+                "Model",
+                Some(if cur == MODELS.len() { format!("{model} (from config.toml). Uses your plan's Codex usage.").into() } else { "Uses your plan's Codex usage. Pick another if this one isn't on your plan.".into() }),
+                ui::popup("chatgpt-model", &opts, cur, move |i, cx| {
+                    let Some(m) = MODELS.get(i) else { return };
+                    ctrl.update(cx, |c, cx| {
+                        c.api_test = ApiTest::Idle;
+                        c.set("llm.chatgpt.model", *m, cx)
+                    })
+                }),
+            )
+            .into_any_element()
+        };
+        let status: AnyElement = match (&state, &test) {
+            (ChatGptState::Failed(e), _) => div().flex().items_center().gap(px(5.)).text_color(theme::muted()).child(icon(icons::ALERT, 11., theme::amber())).child(div().flex_1().min_w_0().child(e.clone())).into_any_element(),
+            (_, ApiTest::Running) => ui::pending("chatgpt-testing", "Testing…").into_any_element(),
+            (_, ApiTest::Ok(m)) => div().flex().items_center().gap(px(5.)).text_color(theme::muted()).child(icon(icons::CHECK, 11., theme::green())).child(m.clone()).into_any_element(),
+            (_, ApiTest::Failed(e)) => div().flex().items_center().gap(px(5.)).text_color(theme::muted()).child(icon(icons::ALERT, 11., theme::amber())).child(div().flex_1().min_w_0().child(e.clone())).into_any_element(),
+            _ => div().text_color(theme::muted()).child("Your transcript is sent to OpenAI under your account. The sign-in is kept in your Keychain.").into_any_element(),
+        };
+        let test_row = div()
+            .flex()
+            .items_center()
+            .gap(px(12.))
+            .min_h(px(44.))
+            .child(div().flex_1().min_w_0().text_size(px(theme::SUBHEAD)).child(status))
+            .when(signed_in, |d| {
+                let ctrl = ctrl.clone();
+                d.child(ui::button("chatgpt-test", "Test", Btn::Outline).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.test_chatgpt(cx))))
+            })
+            .into_any_element();
+        ui::card(vec![account_row, model_row, test_row])
     }
 
     fn jargon_card(&self, cfg: &stenly_core::config::Config) -> gpui::Div {

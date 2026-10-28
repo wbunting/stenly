@@ -511,6 +511,9 @@ pub fn summarize_opts(cfg: &LlmConfig, target: &crate::config::LlmTarget, opts: 
     if target.cli.is_none() && (target.endpoint.is_empty() || target.model.is_empty()) {
         anyhow::bail!("no summary model set up (Settings → Summaries)");
     }
+    if target.backend == crate::config::Backend::ChatGpt && crate::chatgpt::signed_in().is_none() {
+        anyhow::bail!("not signed in to ChatGPT. Sign in in Settings → Summaries");
+    }
     let base = if cfg.prompt_file.trim().is_empty() {
         DEFAULT_PROMPT.to_string()
     } else {
@@ -602,7 +605,7 @@ fn part_notes(cfg: &LlmConfig, target: &crate::config::LlmTarget, prompt: &str) 
 
 /// Errors a retry won't fix (marked [`Permanent`] by [`chat`]).
 fn is_permanent(e: &anyhow::Error) -> bool {
-    e.downcast_ref::<Permanent>().is_some() || e.downcast_ref::<crate::cli_llm::CliError>().is_some_and(|c| c.is_permanent())
+    e.downcast_ref::<Permanent>().is_some() || e.downcast_ref::<crate::chatgpt::Fatal>().is_some() || e.downcast_ref::<crate::cli_llm::CliError>().is_some_and(|c| c.is_permanent())
 }
 
 /// The answer after a reasoning model's `<think>…</think>` block.
@@ -615,6 +618,10 @@ pub fn strip_think(s: &str) -> &str {
 
 /// One chat completion for a summary prompt; returns the reply text.
 fn chat(cfg: &LlmConfig, target: &crate::config::LlmTarget, prompt: &str, json: bool) -> Result<String> {
+    if target.backend == crate::config::Backend::ChatGpt {
+        // the prompt itself asks for JSON; the Responses adapter has no JSON mode to fall back from
+        return crate::chatgpt::complete(target, None, prompt, cfg.timeout_secs.max(30)).with_context(|| format!("ChatGPT (model {})", target.model));
+    }
     if let Some(spec) = &target.cli {
         return crate::cli_llm::run(spec, None, prompt, cfg.timeout_secs.max(30));
     }
@@ -676,6 +683,10 @@ impl std::error::Error for Permanent {}
 pub fn complete(target: &crate::config::LlmTarget, system: &str, user: &str, timeout_secs: u64) -> Result<String> {
     anyhow::ensure!(target.cli.is_some() || (!target.endpoint.is_empty() && !target.model.is_empty()), "no AI model set up (Settings → Summaries)");
     let system = format!("{system}\n\nReply with exactly one JSON object with a single key, \"text\", whose value is your output: {{\"text\": \"...\"}}. No other keys.");
+    if target.backend == crate::config::Backend::ChatGpt {
+        let content = crate::chatgpt::complete(target, Some(&system), user, timeout_secs.max(30))?;
+        return Ok(text_from_reply(&content));
+    }
     if let Some(spec) = &target.cli {
         return Ok(text_from_reply(&crate::cli_llm::run(spec, Some(&system), user, timeout_secs)?));
     }
@@ -742,6 +753,9 @@ fn text_from_reply(content: &str) -> String {
 
 /// One tiny request to check endpoint, model and key. Returns latency in ms.
 pub fn ping(target: &crate::config::LlmTarget) -> Result<u128> {
+    if target.backend == crate::config::Backend::ChatGpt {
+        return crate::chatgpt::ping(target);
+    }
     if let Some(spec) = &target.cli {
         return crate::cli_llm::ping(spec);
     }
@@ -1087,7 +1101,7 @@ mod tests {
     #[test]
     fn every_part_failing_reports_the_cause() {
         let srv = crate::destinations::testutil::MockServer::start(|_| (401, r#"{"error":{"message":"nope"}}"#.into()));
-        let target = crate::config::LlmTarget { endpoint: format!("{}/v1", srv.url), model: "m".into(), api_key: Some("bad".into()), reasoning_effort: String::new(), keep_alive: None, local: false, cli: None };
+        let target = crate::config::LlmTarget { endpoint: format!("{}/v1", srv.url), model: "m".into(), api_key: Some("bad".into()), reasoning_effort: String::new(), keep_alive: None, local: false, cli: None, backend: Default::default() };
         let t = call(75);
         let parts = split_parts(&t).len();
         let e = summarize_opts(&LlmConfig::default(), &target, &Options::default(), "Sync", &t).unwrap_err();
@@ -1200,7 +1214,7 @@ mod ping_tests {
     use crate::config::LlmTarget;
 
     fn t(endpoint: &str, key: Option<&str>) -> LlmTarget {
-        LlmTarget { endpoint: endpoint.into(), model: "x".into(), api_key: key.map(Into::into), reasoning_effort: String::new(), keep_alive: None, local: false, cli: None }
+        LlmTarget { endpoint: endpoint.into(), model: "x".into(), api_key: key.map(Into::into), reasoning_effort: String::new(), keep_alive: None, local: false, cli: None, backend: Default::default() }
     }
 
     /// Hits real public endpoints with a bogus key; run with `--ignored` when online.

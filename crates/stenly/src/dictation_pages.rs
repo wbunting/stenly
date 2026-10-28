@@ -129,7 +129,9 @@ impl MainWindow {
             })
             .into_any_element()
         };
-        let llm_label = if cfg.llm.uses_cli() {
+        let llm_label = if cfg.llm.uses_chatgpt() {
+            format!("{} (ChatGPT)", cfg.llm.target(|| None).model)
+        } else if cfg.llm.uses_cli() {
             cfg.llm.target(|| None).cli.map(|c| c.tool.label().to_string()).unwrap_or_default()
         } else if cfg.llm.uses_api() {
             format!("{} (API)", cfg.llm.api.model)
