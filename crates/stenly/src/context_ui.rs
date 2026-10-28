@@ -172,6 +172,7 @@ impl ContextUi {
                 None,
                 "Model",
                 Some(SharedString::from(match provider {
+                    0 if target.cli.is_some() => format!("{} can't call tools, so it can't gather context. Choose Hosted API or Custom.", target.cli.as_ref().map(|c| c.tool.label()).unwrap_or_default()),
                     0 => format!("Same as summaries · {}", if target.model.is_empty() { "not set up".into() } else { target.model.clone() }),
                     1 => format!("Your hosted API · {}", if target.model.is_empty() { "not set up".into() } else { target.model.clone() }),
                     _ => "Needs a model that calls tools reliably (small local models often don't)".into(),

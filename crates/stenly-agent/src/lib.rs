@@ -198,6 +198,15 @@ pub fn seed_for_event(cfg: &Config, ev: Option<&CalendarEvent>) -> Seed {
     }
 }
 
+/// Why the context agent can't run on the configured model, if it can't:
+/// it needs tool calls, which an installed Codex / Claude Code (the "cli"
+/// summary provider) doesn't offer here.
+pub fn unsupported_model(cfg: &Config) -> Option<String> {
+    cfg.context.target(&cfg.llm, || None).cli.map(|c| {
+        format!("{} can't gather context: the agent needs a model that calls tools. Choose “Hosted API” or “Custom” for the model in Settings → Context.", c.tool.label())
+    })
+}
+
 /// The model the agent runs on.
 pub fn model(cfg: &Config) -> llm::OpenAiChat {
     llm::OpenAiChat { target: cfg.context.target(&cfg.llm, stenly_core::secrets::llm_api_key), timeout_secs: 120 }
@@ -216,6 +225,15 @@ pub fn gather_for_session(cfg: &Config, dir: &Path, on_event: &mut dyn FnMut(Eve
 /// Gather context for a seed (no files written). `scope` keeps the meeting's
 /// own (and later) material out of the sources.
 pub fn gather(cfg: &Config, seed: &Seed, scope: &tools::Scope, on_event: &mut dyn FnMut(Event)) -> MeetingContext {
+    // Codex / Claude Code summaries run with every tool off, and the agent lives on tool calls: say so instead of looping on a model that can't use them.
+    if let Some(note) = unsupported_model(cfg) {
+        tracing::info!("{note}");
+        let target = cfg.context.target(&cfg.llm, || None);
+        return MeetingContext {
+            gathered: Some(stenly_core::context::Gathered { at: chrono::Local::now(), model: target.model, secs: 0.0, steps: vec![], stopped: Some(stenly_core::context::Stop::ModelError), note: Some(note) }),
+            ..Default::default()
+        };
+    }
     let set = toolset(cfg, scope);
     let mut guidance = set.guidance.clone();
     let down: Vec<String> = set.sources.iter().filter_map(|s| s.error.as_ref().map(|e| format!("{} ({e})", s.id))).collect();
@@ -231,4 +249,36 @@ pub fn gather(cfg: &Config, seed: &Seed, scope: &tools::Scope, on_event: &mut dy
 /// Sessions ready for context: none gathered yet, or the last run failed.
 pub fn needs_context(dir: &Path) -> bool {
     stenly_core::context::load(dir).is_none_or(|c| c.failed())
+}
+
+#[cfg(test)]
+mod cli_tests {
+    use super::*;
+
+    #[test]
+    fn context_agent_fails_clearly_on_a_cli_summary_provider() {
+        let mut cfg = Config::default();
+        cfg.llm.provider = "cli".into();
+        cfg.llm.cli.tool = "codex".into();
+        assert!(unsupported_model(&cfg).unwrap().contains("Codex can't gather context"));
+        // no model call, no tool run: it returns at once with a failed (retryable) result carrying the reason
+        let started = std::time::Instant::now();
+        let ctx = gather(&cfg, &Seed::default(), &tools::Scope::default(), &mut |_| {});
+        assert!(started.elapsed() < std::time::Duration::from_secs(2));
+        assert!(ctx.failed());
+        assert!(ctx.gathered.unwrap().note.unwrap().contains("calls tools"));
+        // a hosted or custom context model is fine
+        cfg.context.provider = "custom".into();
+        assert!(unsupported_model(&cfg).is_none());
+        assert!(unsupported_model(&Config::default()).is_none());
+    }
+
+    #[test]
+    fn the_chat_client_refuses_a_cli_target() {
+        let mut cfg = Config::default();
+        cfg.llm.provider = "cli".into();
+        let m = llm::OpenAiChat { target: cfg.llm.target(|| None), timeout_secs: 5 };
+        use llm::ChatModel;
+        assert!(m.chat(&[], &[]).unwrap_err().to_string().contains("can't call tools"));
+    }
 }

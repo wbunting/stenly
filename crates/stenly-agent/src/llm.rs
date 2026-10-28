@@ -102,6 +102,7 @@ impl ChatModel for OpenAiChat {
 
     fn chat(&self, messages: &[Message], tools: &[ToolSpec]) -> Result<Message> {
         let t = &self.target;
+        anyhow::ensure!(t.cli.is_none(), "this model can't call tools; the context agent needs a hosted API or custom model (Settings → Context)");
         anyhow::ensure!(!t.endpoint.is_empty() && !t.model.is_empty(), "no model set up for context (Settings → Context)");
         let url = format!("{}/chat/completions", t.endpoint);
         let mut body = json!({

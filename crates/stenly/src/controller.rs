@@ -113,6 +113,10 @@ pub struct Controller {
     /// Result of the last VoiceInk import (shown on the Dictation page).
     pub import_note: Option<String>,
     pub api_test: ApiTest,
+    /// Codex / Claude Code found on this Mac (Settings → Summaries, onboarding), and the last test of the chosen one.
+    pub cli_tools: Vec<stenly_core::cli_llm::Detected>,
+    pub cli_checked: bool,
+    pub cli_test: ApiTest,
     /// Latest Recent-list read (see [`Controller::refresh_recent`]).
     recent_task: Option<Task<()>>,
     /// A recording that has stopped but is still being finalized.
@@ -273,6 +277,9 @@ impl Controller {
             api_key_saved: stenly_core::secrets::llm_api_key().is_some(),
             import_note: None,
             api_test: ApiTest::Idle,
+            cli_tools: vec![],
+            cli_checked: false,
+            cli_test: ApiTest::Idle,
             recent_task: None,
             finishing: None,
             context: ContextState::default(),
@@ -285,6 +292,7 @@ impl Controller {
             this.pending_permissions = vec![Permission::SystemAudio];
         }
         this.refresh_ollama(cx);
+        this.refresh_cli_tools(cx);
         if this.uses_eventkit() || matches!(this.kody, KodyState::Connected) {
             this.load_calendars(cx);
         }
@@ -1471,6 +1479,57 @@ impl Controller {
             let _ = this.update(cx, |c, cx| {
                 c.api_test = match r {
                     Ok(ms) => ApiTest::Ok(format!("Connected · answered in {:.1} s", ms as f32 / 1000.0)),
+                    Err(e) => ApiTest::Failed(format!("{e:#}")),
+                };
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    // ---- Codex / Claude Code as the summary model
+    /// Look for `codex` and `claude` (off the UI thread: it asks each for its version).
+    pub fn refresh_cli_tools(&mut self, cx: &mut Context<Self>) {
+        let cfg = self.config.llm.cli.clone();
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
+            let found = cx.background_spawn(async move { stenly_core::cli_llm::detect(&cfg) }).await;
+            let _ = this.update(cx, |c, cx| {
+                c.cli_tools = found;
+                c.cli_checked = true;
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn cli_tool(&self, tool: stenly_core::cli_llm::Tool) -> Option<&stenly_core::cli_llm::Detected> {
+        self.cli_tools.iter().find(|d| d.tool == tool)
+    }
+
+    /// Write summaries with this tool.
+    pub fn use_cli_tool(&mut self, tool: stenly_core::cli_llm::Tool, cx: &mut Context<Self>) {
+        if self.config.llm.cli.tool != tool.id() {
+            self.set("llm.cli.tool", tool.id(), cx);
+            // a model name for one tool means nothing to the other
+            self.set("llm.cli.model", "", cx);
+        }
+        self.set("llm.provider", "cli", cx);
+        self.cli_test = ApiTest::Idle;
+        cx.notify();
+    }
+
+    /// Ask the chosen tool a tiny question: installed, signed in, answering.
+    pub fn test_cli(&mut self, cx: &mut Context<Self>) {
+        let mut llm = self.config.llm.clone();
+        llm.provider = "cli".into();
+        let target = llm.target(|| None);
+        self.cli_test = ApiTest::Running;
+        cx.notify();
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
+            let r = cx.background_spawn(async move { stenly_core::summary::ping(&target) }).await;
+            let _ = this.update(cx, |c, cx| {
+                c.cli_test = match r {
+                    Ok(ms) => ApiTest::Ok(format!("Signed in · answered in {:.1} s", ms as f32 / 1000.0)),
                     Err(e) => ApiTest::Failed(format!("{e:#}")),
                 };
                 cx.notify();

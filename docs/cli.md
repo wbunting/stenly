@@ -25,6 +25,19 @@ cargo run -p stenly-cli -- destinations
 
 `stenly-cli --help` and `stenly-cli <subcommand> --help` are the source of truth for the installed version. Recording captures your microphone and the system audio available on your computer; obtain any required consent before you use it.
 
+## Summaries through Codex or Claude Code
+
+If OpenAI's `codex` or Anthropic's `claude` (Claude Code) is installed and signed in, Stenly can write summaries with it (Settings → Summaries, or onboarding). It runs `codex exec` / `claude -p` with the prompt on stdin, in an empty temporary folder, with tools off (Codex read-only with no approvals; Claude Code with an empty tool list), and kills the process tree on timeout. Your own tool and login pay; Stenly never handles a token. The transcript is sent to OpenAI or Anthropic through that tool. The context agent needs tool calls and can't use this provider.
+
+```toml
+[llm]
+provider = "cli"
+[llm.cli]
+tool = "claude"   # or "codex"
+path = ""         # only if Stenly can't find it
+model = ""        # "" = the tool's default
+```
+
 ## MCP
 
 `stenly-mcp` makes local meeting history available to an agent over the Model Context Protocol. Clients can list and search meetings, retrieve transcripts and notes, and inspect upcoming meetings. Recipes can call your configured summary model and optionally save their results, so not every tool is read-only. Sharing tools are exposed only when `[mcp] write_tools = true` is explicitly configured; check `stenly-mcp tools` for the installed version.

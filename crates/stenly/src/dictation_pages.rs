@@ -129,7 +129,13 @@ impl MainWindow {
             })
             .into_any_element()
         };
-        let llm_label = if cfg.llm.uses_api() { format!("{} (API)", cfg.llm.api.model) } else { format!("{} on this Mac", cfg.llm.model) };
+        let llm_label = if cfg.llm.uses_cli() {
+            cfg.llm.target(|| None).cli.map(|c| c.tool.label().to_string()).unwrap_or_default()
+        } else if cfg.llm.uses_api() {
+            format!("{} (API)", cfg.llm.api.model)
+        } else {
+            format!("{} on this Mac", cfg.llm.model)
+        };
 
         // Replacements: "heard as → write as" chips + an add row.
         let reps: Vec<AnyElement> = d

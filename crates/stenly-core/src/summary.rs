@@ -508,7 +508,7 @@ fn cap(text: String, max: usize, what: &str) -> String {
 /// meetings are summarized part by part (dense notes per ~12 minutes), then
 /// merged into one set of notes, so the end of the meeting isn't lost.
 pub fn summarize_opts(cfg: &LlmConfig, target: &crate::config::LlmTarget, opts: &Options, title: &str, transcript: &Transcript) -> Result<Summary> {
-    if target.endpoint.is_empty() || target.model.is_empty() {
+    if target.cli.is_none() && (target.endpoint.is_empty() || target.model.is_empty()) {
         anyhow::bail!("no summary model set up (Settings → Summaries)");
     }
     let base = if cfg.prompt_file.trim().is_empty() {
@@ -543,7 +543,7 @@ pub fn summarize_opts(cfg: &LlmConfig, target: &crate::config::LlmTarget, opts: 
             Ok(format!("{}\n{text}\n\n", head(i)))
         };
         // hosted APIs take a few parts at once; a local model runs one request at a time anyway
-        let at_once = if target.local { 1 } else { PARALLEL_PARTS };
+        let at_once = if target.local { 1 } else if target.cli.is_some() { 2 } else { PARALLEL_PARTS };
         let mut notes = String::new();
         let mut failed: Vec<anyhow::Error> = Vec::new();
         for batch in (0..n).collect::<Vec<_>>().chunks(at_once) {
@@ -602,7 +602,7 @@ fn part_notes(cfg: &LlmConfig, target: &crate::config::LlmTarget, prompt: &str) 
 
 /// Errors a retry won't fix (marked [`Permanent`] by [`chat`]).
 fn is_permanent(e: &anyhow::Error) -> bool {
-    e.downcast_ref::<Permanent>().is_some()
+    e.downcast_ref::<Permanent>().is_some() || e.downcast_ref::<crate::cli_llm::CliError>().is_some_and(|c| c.is_permanent())
 }
 
 /// The answer after a reasoning model's `<think>…</think>` block.
@@ -615,6 +615,9 @@ pub fn strip_think(s: &str) -> &str {
 
 /// One chat completion for a summary prompt; returns the reply text.
 fn chat(cfg: &LlmConfig, target: &crate::config::LlmTarget, prompt: &str, json: bool) -> Result<String> {
+    if let Some(spec) = &target.cli {
+        return crate::cli_llm::run(spec, None, prompt, cfg.timeout_secs.max(30));
+    }
     let url = format!("{}/chat/completions", target.endpoint);
     let call = |json_mode: bool| -> Result<ChatResponse, ureq::Error> {
         let body = ChatRequest {
@@ -671,8 +674,11 @@ impl std::error::Error for Permanent {}
 /// (qwen3) otherwise narrate their thinking into the answer even with
 /// reasoning off; JSON mode keeps them to the point (~1.5 s on an M3).
 pub fn complete(target: &crate::config::LlmTarget, system: &str, user: &str, timeout_secs: u64) -> Result<String> {
-    anyhow::ensure!(!target.endpoint.is_empty() && !target.model.is_empty(), "no AI model set up (Settings → Summaries)");
+    anyhow::ensure!(target.cli.is_some() || (!target.endpoint.is_empty() && !target.model.is_empty()), "no AI model set up (Settings → Summaries)");
     let system = format!("{system}\n\nReply with exactly one JSON object with a single key, \"text\", whose value is your output: {{\"text\": \"...\"}}. No other keys.");
+    if let Some(spec) = &target.cli {
+        return Ok(text_from_reply(&crate::cli_llm::run(spec, Some(&system), user, timeout_secs)?));
+    }
     let call = |json_mode: bool| -> Result<serde_json::Value, ureq::Error> {
         let mut req = ureq::post(&format!("{}/chat/completions", target.endpoint))
             .config()
@@ -713,8 +719,13 @@ pub fn complete(target: &crate::config::LlmTarget, system: &str, user: &str, tim
         e => anyhow::Error::from(e),
     })?;
     let content = v["choices"][0]["message"]["content"].as_str().unwrap_or_default();
+    Ok(text_from_reply(content))
+}
+
+/// The `text` of a `{"text": "..."}` reply; tolerates code fences, reasoning
+/// blocks and plain text from backends without a JSON mode.
+fn text_from_reply(content: &str) -> String {
     let content = strip_think(content);
-    // {"text": "..."}; tolerate code fences and plain text from APIs without JSON mode
     let s = content.trim().trim_start_matches("```json").trim_start_matches("```").trim_end_matches("```").trim();
     let text = match (s.find('{'), s.rfind('}')) {
         (Some(a), Some(b)) if a < b => serde_json::from_str::<serde_json::Value>(&s[a..=b]).ok().and_then(|v| {
@@ -726,11 +737,14 @@ pub fn complete(target: &crate::config::LlmTarget, system: &str, user: &str, tim
         _ => None,
     }
     .unwrap_or_else(|| s.to_string());
-    Ok(text.trim().to_string())
+    text.trim().to_string()
 }
 
 /// One tiny request to check endpoint, model and key. Returns latency in ms.
 pub fn ping(target: &crate::config::LlmTarget) -> Result<u128> {
+    if let Some(spec) = &target.cli {
+        return crate::cli_llm::ping(spec);
+    }
     if target.endpoint.is_empty() {
         anyhow::bail!("enter the API's base URL");
     }
@@ -914,6 +928,82 @@ mod tests {
         assert!(split_parts(&Transcript::default()).is_empty());
     }
 
+    /// A fake `claude`: `body` is a shell script run after the login check, reading the prompt from stdin.
+    #[cfg(unix)]
+    fn fake_claude(dir: &std::path::Path, body: &str) -> crate::config::LlmTarget {
+        use std::os::unix::fs::PermissionsExt;
+        let p = dir.join("claude");
+        std::fs::write(&p, format!("#!/bin/sh\nif [ \"$1\" = auth ]; then echo '{{\"loggedIn\": true}}'; exit 0; fi\n{body}\n")).unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let mut llm = LlmConfig::default();
+        llm.provider = "cli".into();
+        llm.cli.tool = "claude".into();
+        llm.cli.path = p.to_string_lossy().into_owned();
+        llm.target(|| None)
+    }
+
+    /// Replies to the summary prompt with fenced JSON, and to a part prompt with Markdown notes.
+    #[cfg(unix)]
+    fn summarizing_claude(dir: &std::path::Path) -> crate::config::LlmTarget {
+        let json = serde_json::json!({"title": "Plan sync", "summary": "They planned.", "sections": [{"heading": "Plan", "bullets": ["a point"]}], "action_items": [{"owner": "Alex", "task": "do it"}]});
+        let fenced = serde_json::json!({"type": "result", "is_error": false, "result": format!("```json\n{json}\n```")});
+        let notes = serde_json::json!({"type": "result", "is_error": false, "result": "## Plan\n- the plan was discussed"});
+        // replies live in files so the script needs no quoting
+        std::fs::write(dir.join("fenced.json"), fenced.to_string()).unwrap();
+        std::fs::write(dir.join("notes.json"), notes.to_string()).unwrap();
+        let (f, n) = (dir.join("fenced.json"), dir.join("notes.json"));
+        fake_claude(dir, &format!("input=$(cat)\ncase \"$input\" in\n  *\"one part of a long meeting\"*) cat {} ;;\n  *) cat {} ;;\nesac", n.display(), f.display()))
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn summaries_run_through_a_cli_target() {
+        let d = tempfile::tempdir().unwrap();
+        let target = summarizing_claude(d.path());
+        assert!(target.cli.is_some() && target.endpoint.is_empty());
+        let s = summarize_opts(&LlmConfig::default(), &target, &Options::default(), "Sync", &call(10)).unwrap();
+        assert_eq!(s.title.as_deref(), Some("Plan sync"));
+        assert_eq!(s.sections[0].bullets[0].text(), "a point");
+        assert_eq!(s.action_items[0].owner.as_deref(), Some("Alex"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn long_meetings_are_summarized_in_parts_through_a_cli_target() {
+        let d = tempfile::tempdir().unwrap();
+        let target = summarizing_claude(d.path());
+        let t = call(75);
+        assert!(needs_parts(&t));
+        let s = summarize_opts(&LlmConfig::default(), &target, &Options::default(), "Long", &t).unwrap();
+        assert_eq!(s.title.as_deref(), Some("Plan sync"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn complete_and_ping_work_through_a_cli_target() {
+        let d = tempfile::tempdir().unwrap();
+        let reply = serde_json::json!({"type": "result", "is_error": false, "result": "{\"text\": \"Hello, world.\"}"});
+        std::fs::write(d.path().join("r.json"), reply.to_string()).unwrap();
+        let target = fake_claude(d.path(), &format!("cat >/dev/null\ncat {}", d.path().join("r.json").display()));
+        assert_eq!(complete(&target, "Fix grammar.", "hello world", 30).unwrap(), "Hello, world.");
+        assert!(ping(&target).unwrap() < 30_000);
+    }
+
+    #[test]
+    fn a_missing_cli_is_a_clear_error_not_a_hang() {
+        let mut llm = LlmConfig::default();
+        llm.provider = "cli".into();
+        llm.cli.tool = "codex".into();
+        llm.cli.path = "/nonexistent/codex".into();
+        let target = llm.target(|| None);
+        let e = summarize_opts(&llm, &target, &Options::default(), "Sync", &call(5)).unwrap_err();
+        assert!(format!("{e:#}").contains("Stenly can't run Codex"), "{e:#}");
+        assert!(complete(&target, "x", "y", 5).unwrap_err().to_string().contains("Codex"));
+        // permanent errors are not retried; a timeout is
+        assert!(is_permanent(&anyhow::Error::new(crate::cli_llm::CliError::NotLoggedIn(crate::cli_llm::Tool::Codex))));
+        assert!(!is_permanent(&anyhow::Error::new(crate::cli_llm::CliError::Timeout(crate::cli_llm::Tool::Codex, 5))));
+    }
+
     #[test]
     fn detail_scales_with_length() {
         assert!(detail_hint(4.0).contains("short meeting"));
@@ -997,7 +1087,7 @@ mod tests {
     #[test]
     fn every_part_failing_reports_the_cause() {
         let srv = crate::destinations::testutil::MockServer::start(|_| (401, r#"{"error":{"message":"nope"}}"#.into()));
-        let target = crate::config::LlmTarget { endpoint: format!("{}/v1", srv.url), model: "m".into(), api_key: Some("bad".into()), reasoning_effort: String::new(), keep_alive: None, local: false };
+        let target = crate::config::LlmTarget { endpoint: format!("{}/v1", srv.url), model: "m".into(), api_key: Some("bad".into()), reasoning_effort: String::new(), keep_alive: None, local: false, cli: None };
         let t = call(75);
         let parts = split_parts(&t).len();
         let e = summarize_opts(&LlmConfig::default(), &target, &Options::default(), "Sync", &t).unwrap_err();
@@ -1110,7 +1200,7 @@ mod ping_tests {
     use crate::config::LlmTarget;
 
     fn t(endpoint: &str, key: Option<&str>) -> LlmTarget {
-        LlmTarget { endpoint: endpoint.into(), model: "x".into(), api_key: key.map(Into::into), reasoning_effort: String::new(), keep_alive: None, local: false }
+        LlmTarget { endpoint: endpoint.into(), model: "x".into(), api_key: key.map(Into::into), reasoning_effort: String::new(), keep_alive: None, local: false, cli: None }
     }
 
     /// Hits real public endpoints with a bogus key; run with `--ignored` when online.

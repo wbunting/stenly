@@ -44,7 +44,8 @@ pub struct ContextConfig {
     /// Minutes before a calendar meeting to start gathering.
     pub before_mins: i64,
     /// "summary" = the summary model; "api" = `[llm.api]`; or "custom" with
-    /// `endpoint`/`model` below. The agent needs a model that calls tools well.
+    /// `endpoint`/`model` below. The agent needs a model that calls tools well,
+    /// which a Codex / Claude Code summary provider ("cli") can't do here.
     pub provider: String,
     pub endpoint: String,
     pub model: String,
@@ -121,6 +122,7 @@ impl ContextConfig {
                 reasoning_effort: String::new(),
                 keep_alive: None,
                 local: false,
+                cli: None,
             },
             "api" => LlmConfig { provider: "api".into(), ..llm.clone() }.target(keychain),
             _ => llm.target(keychain),
@@ -363,8 +365,9 @@ pub struct AsrConfig {
 #[serde(default)]
 pub struct LlmConfig {
     pub enabled: bool,
-    /// Which backend writes summaries: "ollama" (local, default) or "api"
-    /// (any OpenAI-compatible service configured in `[llm.api]`).
+    /// Which backend writes summaries: "ollama" (local, default), "api"
+    /// (any OpenAI-compatible service configured in `[llm.api]`) or "cli"
+    /// (an installed Codex / Claude Code, see `[llm.cli]`).
     pub provider: String,
     /// Any OpenAI-compatible endpoint (Ollama, llama.cpp, LM Studio, vLLM, ...).
     pub endpoint: String,
@@ -384,6 +387,20 @@ pub struct LlmConfig {
     pub language: String,
     /// Hosted, OpenAI-compatible provider used when `provider = "api"`.
     pub api: ApiLlmConfig,
+    /// The Codex / Claude Code command-line tool used when `provider = "cli"`.
+    pub cli: CliLlmConfig,
+}
+
+/// Summaries through a coding-agent CLI the user is already signed in to.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[serde(default)]
+pub struct CliLlmConfig {
+    /// "codex" or "claude" ("" = whichever is installed).
+    pub tool: String,
+    /// Path to the executable ("" = look on PATH and in the usual install folders).
+    pub path: String,
+    /// Model name passed to the tool ("" = the tool's own default).
+    pub model: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -413,6 +430,8 @@ pub struct LlmTarget {
     /// Ollama-only `keep_alive` (never sent to hosted APIs).
     pub keep_alive: Option<String>,
     pub local: bool,
+    /// Set for `provider = "cli"`: run this tool instead of calling `endpoint`.
+    pub cli: Option<crate::cli_llm::CliSpec>,
 }
 
 impl LlmConfig {
@@ -420,9 +439,36 @@ impl LlmConfig {
         self.provider.eq_ignore_ascii_case("api")
     }
 
+    /// Summaries are written by an installed Codex / Claude Code.
+    pub fn uses_cli(&self) -> bool {
+        self.provider.eq_ignore_ascii_case("cli")
+    }
+
+    /// Summaries are written by an Ollama-style server on this Mac (neither a hosted API nor a CLI).
+    pub fn uses_ollama(&self) -> bool {
+        !self.uses_api() && !self.uses_cli()
+    }
+
     /// Resolve where summaries go. `keychain` supplies a stored key for the
     /// hosted provider when the config holds none.
     pub fn target(&self, keychain: impl FnOnce() -> Option<String>) -> LlmTarget {
+        if self.uses_cli() {
+            let c = &self.cli;
+            // no tool chosen yet: the first one that is installed
+            let tool = crate::cli_llm::Tool::parse(&c.tool)
+                .or_else(|| crate::cli_llm::Tool::ALL.into_iter().find(|t| crate::cli_llm::find(*t, "").is_some()))
+                .unwrap_or(crate::cli_llm::Tool::Codex);
+            let model = c.model.trim().to_string();
+            return LlmTarget {
+                endpoint: String::new(),
+                model: if model.is_empty() { tool.label().to_string() } else { model.clone() },
+                api_key: None,
+                reasoning_effort: String::new(),
+                keep_alive: None,
+                local: false,
+                cli: Some(crate::cli_llm::CliSpec { tool, path: c.path.trim().to_string(), model }),
+            };
+        }
         if self.uses_api() {
             let a = &self.api;
             let key = Some(a.api_key.trim().to_string())
@@ -436,6 +482,7 @@ impl LlmConfig {
                 reasoning_effort: a.reasoning_effort.clone(),
                 keep_alive: None,
                 local: false,
+                cli: None,
             }
         } else {
             LlmTarget {
@@ -445,6 +492,7 @@ impl LlmConfig {
                 reasoning_effort: self.reasoning_effort.clone(),
                 keep_alive: Some(self.keep_alive.clone()).filter(|s| !s.is_empty()),
                 local: true,
+                cli: None,
             }
         }
     }
@@ -532,6 +580,7 @@ impl Default for LlmConfig {
             keep_alive: "0".into(),
             language: String::new(),
             api: ApiLlmConfig::default(),
+            cli: CliLlmConfig::default(),
         }
     }
 }
@@ -807,7 +856,8 @@ speaker_names = true
 save_meeting_app_snapshots = false
 
 [llm]
-# Who writes summaries: "ollama" (on this Mac) or "api" (a hosted model, see [llm.api]).
+# Who writes summaries: "ollama" (on this Mac), "api" (a hosted model, see [llm.api]) or
+# "cli" (an installed Codex or Claude Code you're signed in to, see [llm.cli]).
 # Pick a model in Settings → Summaries (Ollama models are downloaded for you).
 enabled = true
 provider = "ollama"
@@ -838,6 +888,17 @@ model = ""
 api_key = ""
 api_key_env = ""
 reasoning_effort = ""
+
+[llm.cli]
+# Used when provider = "cli": Stenly runs your own `codex exec` or `claude -p` (no tools,
+# read-only, in an empty temporary folder). Your transcript is sent to OpenAI / Anthropic
+# through that tool and billed to the account it is signed in to; Stenly never sees a token.
+# "codex" or "claude" ("" = whichever is installed)
+tool = ""
+# full path if Stenly can't find it ("" = search PATH, ~/.local/bin, Homebrew, npm/bun/volta/fnm bins)
+path = ""
+# model name for the tool ("" = the tool's own default)
+model = ""
 
 [templates]
 # Note templates and recipes are Markdown files in templates/ and recipes/ next to
@@ -975,6 +1036,28 @@ mod tests {
         let saving: Config = toml::from_str("[dictation]\nmodel_idle_secs = 300").unwrap();
         assert_eq!(saving.dictation.model_idle_secs, 300);
         assert!(toml::from_str::<Config>("[dictation]\nmodel_idle_secs = -1").is_err());
+    }
+
+    #[test]
+    fn cli_provider_resolves_to_a_cli_target() {
+        let cfg: Config = toml::from_str("[llm]\nprovider = \"cli\"\n[llm.cli]\ntool = \"claude\"\nmodel = \"sonnet\"\npath = \"/x/claude\"").unwrap();
+        assert!(cfg.llm.uses_cli() && !cfg.llm.uses_api() && !cfg.llm.uses_ollama());
+        let t = cfg.llm.target(|| None);
+        let c = t.cli.expect("cli target");
+        assert_eq!((c.tool, c.model.as_str(), c.path.as_str()), (crate::cli_llm::Tool::Claude, "sonnet", "/x/claude"));
+        assert!(!t.local && t.api_key.is_none());
+        // the other providers are untouched
+        assert!(Config::default().llm.target(|| None).cli.is_none());
+        let api: Config = toml::from_str("[llm]\nprovider = \"api\"").unwrap();
+        assert!(api.llm.target(|| Some("k".into())).cli.is_none());
+        // "Same as summaries" for the context agent inherits it; "api"/"custom" don't
+        assert!(cfg.context.target(&cfg.llm, || None).cli.is_some());
+        let mut ctx = cfg.clone();
+        ctx.context.provider = "api".into();
+        assert!(ctx.context.target(&ctx.llm, || None).cli.is_none());
+        // the commented default file parses and keeps Ollama
+        let d: Config = toml::from_str(&default_config_toml()).unwrap();
+        assert!(d.llm.uses_ollama() && d.llm.cli == CliLlmConfig::default());
     }
 
     #[test]
