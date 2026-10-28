@@ -170,6 +170,26 @@ pub fn icon_w(s: Sym, size: f32, weight: Weight, color: impl Into<Rgba>) -> AnyE
     }
 }
 
+/// The full-colour logo of a call app, for the providers we bundle a mark for
+/// (see `assets/services/README.md`). Others fall back to a neutral glyph.
+pub fn provider_logo(p: stenly_core::meeting_url::Provider, size: f32) -> Option<gpui::Img> {
+    use stenly_core::meeting_url::Provider;
+    use std::sync::LazyLock;
+    fn png(bytes: &'static [u8]) -> Arc<gpui::Image> {
+        Arc::new(gpui::Image::from_bytes(gpui::ImageFormat::Png, bytes.to_vec()))
+    }
+    static ZOOM: LazyLock<Arc<gpui::Image>> = LazyLock::new(|| png(include_bytes!("../assets/services/zoom.png")));
+    static MEET: LazyLock<Arc<gpui::Image>> = LazyLock::new(|| png(include_bytes!("../assets/services/google-meet.png")));
+    static TEAMS: LazyLock<Arc<gpui::Image>> = LazyLock::new(|| png(include_bytes!("../assets/services/teams.png")));
+    let image = match p {
+        Provider::Zoom => &ZOOM,
+        Provider::GoogleMeet => &MEET,
+        Provider::Teams => &TEAMS,
+        _ => return None,
+    };
+    Some(gpui::img((*image).clone()).size(px(size)).flex_shrink_0())
+}
+
 /// The app icon (full colour PNG).
 pub fn logo(size: f32) -> gpui::Img {
     use std::sync::LazyLock;

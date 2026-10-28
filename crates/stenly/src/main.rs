@@ -303,6 +303,24 @@ fn main() {
             });
         }
 
+        // Dev: STENLY_DEMO_JOIN=<meeting url> shows the pre-meeting prompt for a
+        // synthetic event starting in 2 minutes (checks the Join button's logo).
+        if let Ok(url) = std::env::var("STENLY_DEMO_JOIN") {
+            let now = chrono::Utc::now();
+            let start = now + chrono::Duration::minutes(2);
+            let fmt = |t: chrono::DateTime<chrono::Utc>| t.format("%Y%m%dT%H%M%SZ").to_string();
+            let ics = format!(
+                "BEGIN:VCALENDAR\nBEGIN:VEVENT\nUID:demo-join\nSUMMARY:Design review\nDTSTART:{}\nDTEND:{}\nLOCATION:{url}\nEND:VEVENT\nEND:VCALENDAR",
+                fmt(start),
+                fmt(start + chrono::Duration::minutes(30)),
+            );
+            if let Some(ev) = stenly_core::calendar::events_from_ics(&ics, now, now + chrono::Duration::hours(1)).into_iter().next() {
+                let ctrl = controller.clone();
+                let shell = shell.clone();
+                cx.defer(move |cx| popup::show(popup::PopupKind::Start(stenly_core::scheduler::Prompt::Upcoming(ev)), ctrl, shell.as_ref(), cx));
+            }
+        }
+
         // Dev: STENLY_TEST_RECORD=<secs> records via the normal GUI path, then quits.
         if let Some(secs) = std::env::var("STENLY_TEST_RECORD").ok().and_then(|v| v.parse::<u64>().ok()) {
             let ctrl = controller.clone();

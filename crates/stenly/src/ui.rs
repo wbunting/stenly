@@ -224,6 +224,12 @@ pub fn button_lead_icon(id: impl Into<ElementId>, label: impl Into<SharedString>
     button_base(id, kind).pl(px(8.)).child(icon(s, 12., btn_icon_color(kind))).child(label)
 }
 
+/// Push button led by a full-colour image (e.g. a call app's logo).
+pub fn button_lead_image(id: impl Into<ElementId>, label: impl Into<SharedString>, kind: Btn, image: impl IntoElement) -> Stateful<Div> {
+    let label: SharedString = label.into();
+    button_base(id, kind).pl(px(6.)).child(image).child(label)
+}
+
 /// Borderless toolbar button: glyph only, hover wash (NSToolbar item).
 pub fn toolbar_button(id: impl Into<ElementId>, s: Sym, active: bool) -> Stateful<Div> {
     div()
