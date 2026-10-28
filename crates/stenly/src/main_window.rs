@@ -645,30 +645,30 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
     Some(handle)
 }
 
-/// macOS 26 toolbar item: a 32pt round button. Drawn entirely by GPUI (a
-/// soft fill + hairline that reads like the system's glass buttons) rather
-/// than a native NSGlassEffectView: those live outside GPUI's frame and lag a
-/// frame behind, which left a ghost circle behind after the button went away.
+/// macOS 26 toolbar item: a round button the height of the toolbar's push
+/// buttons. Drawn entirely by GPUI (a soft fill + hairline that reads like the
+/// system's glass buttons, continuous curve) rather than a native
+/// NSGlassEffectView: those live outside GPUI's frame and lag a frame behind,
+/// which left a ghost circle behind after the button went away.
 fn glass_icon_button(id: &'static str, s: crate::icons::Sym) -> gpui::Stateful<gpui::Div> {
+    use crate::squircle::{self, Surface};
     div()
         .id(id)
-        .size(px(32.))
+        .relative()
+        .size(px(ui::TOOLBAR_H))
         .flex()
+        .flex_shrink_0()
         .items_center()
         .justify_center()
-        .rounded_full()
-        .bg(theme::button())
-        .border_1()
-        .border_color(theme::divider())
-        .hover(|s| s.bg(theme::button_hover()))
-        .active(|s| s.bg(theme::button_hover()))
+        .child(squircle::surface(Surface::fill(theme::button()).hover(theme::button_hover()).border(theme::divider())))
         .child(crate::icons::icon_w(s, 14., crate::icons::Weight::Medium, theme::text()))
 }
 
 /// A capsule surface behind a control (Record button, recording capsule),
 /// drawn by GPUI so it can never outlive the control.
 fn glass_spot(el: impl IntoElement, radius: f32) -> gpui::Div {
-    div().rounded(px(radius)).bg(theme::button()).border_1().border_color(theme::divider()).child(el)
+    use crate::squircle::{self, Surface};
+    squircle::behind(el, Surface::fill(theme::button()).radius(radius).border(theme::divider()))
 }
 
 /// Open Settings → Destinations (from a meeting's Send to… menu).
@@ -1190,7 +1190,7 @@ impl MainWindow {
         let weak = cx.entity().downgrade();
         let label = if sharing { "Sharing…" } else if active { "Shared" } else { "Share" };
         let icon = if active { icons::LINK } else { icons::CLOUD };
-        let button = ui::button_lead_icon("share", label, if active { Btn::Outline } else { Btn::Primary }, icon)
+        let button = ui::toolbar_push(ui::button_lead_icon("share", label, if active { Btn::Outline } else { Btn::Primary }, icon))
             .when(!sharing, |b| b.on_click(move |_, _, cx| {
                 if let Some(w) = weak.upgrade() { w.update(cx, |this, cx| this.share_meeting(dir.clone(), cx)); }
             }))
@@ -1203,16 +1203,16 @@ impl MainWindow {
         let weak = cx.entity().downgrade();
         div().flex().items_center().gap(px(5.)).child(button).child({
             let weak = cx.entity().downgrade();
-            ui::icon_button("share-email", icons::PAPERPLANE, 28., 13., "Send notes to attendees").rounded_full().on_click(move |_, _, cx| {
+            ui::toolbar_icon_button("share-email", icons::PAPERPLANE, "Send notes to attendees").on_click(move |_, _, cx| {
                 if let Some(w) = weak.upgrade() { w.update(cx, |this, cx| this.send_notes_to_attendees(&email_meeting, cx)); }
             })
         }).child({
             let weak = cx.entity().downgrade();
-            ui::icon_button("share-slack", icons::COPY, 28., 13., "Copy notes for Slack").rounded_full().on_click(move |_, _, cx| {
+            ui::toolbar_icon_button("share-slack", icons::COPY, "Copy notes for Slack").on_click(move |_, _, cx| {
                 if let Some(w) = weak.upgrade() { w.update(cx, |this, cx| this.copy_for_slack(&slack_meeting, cx)); }
             })
         }).child(
-            ui::icon_button("share-copy", icons::LINK, 28., 13., "Copy share link").rounded_full().on_click(move |_, _, cx| {
+            ui::toolbar_icon_button("share-copy", icons::LINK, "Copy share link").on_click(move |_, _, cx| {
                 match stenly_core::share::link_for(&copy_dir, None) {
                     Ok(Some(link)) => { cx.write_to_clipboard(ClipboardItem::new_string(link)); if let Some(w) = weak.upgrade() { w.update(cx, |this, cx| this.flash("Private link copied", cx)); } }
                     Ok(None) | Err(_) => if let Some(w) = weak.upgrade() { w.update(cx, |this, cx| this.flash_error("Share key unavailable", cx)); },
@@ -1220,7 +1220,7 @@ impl MainWindow {
             }),
         ).child({
             let weak = cx.entity().downgrade();
-            ui::icon_button("share-revoke", icons::TRASH, 28., 13., "Revoke share link").rounded_full().on_click(move |_, _, cx| {
+            ui::toolbar_icon_button("share-revoke", icons::TRASH, "Revoke share link").on_click(move |_, _, cx| {
                 if let Some(w) = weak.upgrade() { w.update(cx, |this, cx| this.revoke_share(revoke_dir.clone(), cx)); }
             })
         }).into_any_element()
@@ -1363,11 +1363,11 @@ impl MainWindow {
                     .gap(px(6.))
                     .h(px(30.))
                     .px(px(14.))
-                    .rounded_full()
+                    .relative()
                     .text_size(px(theme::BODY))
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(theme::text())
-                    .hover(|s| s.bg(theme::hover()))
+                    .child(crate::squircle::surface(crate::squircle::Surface::clear().radius(15.).hover(theme::hover())))
                     .child(icon(icons::RECORD, 13., theme::red()))
                     .child("Record")
                     .on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.start_now(cx))),
@@ -3104,12 +3104,14 @@ impl Render for MainWindow {
                             .flex()
                             .items_center()
                             .justify_center()
-                            // Circular, like the traffic lights beside it; also ~concentric
-                            // with the panel corner it sits 3pt below.
-                            .rounded_full()
-                            .when(self.search.is_some(), |d| d.bg(theme::selected()))
-                            .hover(|d| d.bg(theme::hover()))
-                            .active(|d| d.bg(theme::selected()))
+                            // Round like the traffic lights beside it, with the glass
+                            // panel's continuous curve.
+                            .relative()
+                            .child(crate::squircle::surface(
+                                if self.search.is_some() { crate::squircle::Surface::fill(theme::selected()) } else { crate::squircle::Surface::clear() }
+                                    .hover(if self.search.is_some() { theme::selected() } else { theme::hover() })
+                                    .pressed(theme::selected()),
+                            ))
                             .tooltip(|_, cx| cx.new(|_| Tip("Search  ⌘F".into())).into())
                             .on_click(cx.listener(|this, _, window, cx| {
                                 if this.search.is_some() {

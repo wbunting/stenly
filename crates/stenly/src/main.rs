@@ -20,6 +20,7 @@ mod onboarding;
 mod popup;
 mod search_palette;
 mod shortcut_field;
+mod squircle;
 mod text_input;
 mod theme;
 mod toast;

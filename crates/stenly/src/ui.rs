@@ -5,6 +5,7 @@
 #![allow(dead_code)]
 
 use crate::icons::{self, Sym, icon};
+use crate::squircle::{self, Surface};
 use crate::theme;
 use gpui::{
     AnyElement, App, ClickEvent, Div, ElementId, FontWeight, IntoElement, ParentElement, SharedString, Stateful, Styled,
@@ -177,16 +178,25 @@ fn button_base(id: impl Into<ElementId>, kind: Btn) -> Stateful<Div> {
         .gap(px(5.))
         .h(px(24.))
         .px(px(12.))
-        // macOS 26 push buttons are capsules, matching the toolbar's Record capsule.
-        .rounded_full()
+        // macOS 26 push buttons are continuous-corner capsules, like the
+        // glass sidebar and the toolbar's Record capsule.
+        .relative()
         .text_size(px(theme::BODY))
         .flex_shrink_0()
         .whitespace_nowrap();
     match kind {
-        Btn::Primary | Btn::Accent => d.bg(theme::accent_fill()).text_color(theme::on_accent()).shadow(bezel_shadow()).active(|s| s.opacity(0.85)),
-        Btn::Ghost | Btn::Outline => d.bg(theme::button()).text_color(theme::text()).shadow(bezel_shadow()).active(|s| s.bg(theme::button_hover())),
-        Btn::Danger => d.bg(theme::button()).text_color(theme::red()).shadow(bezel_shadow()).active(|s| s.bg(theme::button_hover())),
+        Btn::Primary | Btn::Accent => d.child(squircle::surface(Surface::fill(theme::accent_fill()))).text_color(theme::on_accent()).active(|s| s.opacity(0.85)),
+        Btn::Ghost | Btn::Outline => d.child(squircle::surface(Surface::fill(theme::button()).pressed(theme::button_hover()))).text_color(theme::text()),
+        Btn::Danger => d.child(squircle::surface(Surface::fill(theme::button()).pressed(theme::button_hover()))).text_color(theme::red()),
     }
+}
+
+/// Toolbar control height: Share, Send to…, ••• and Back all line up.
+pub const TOOLBAR_H: f32 = 32.;
+
+/// A push button sized for the window toolbar (same height as its icon buttons).
+pub fn toolbar_push(b: Stateful<Div>) -> Stateful<Div> {
+    b.h(px(TOOLBAR_H)).pl(px(12.)).pr(px(14.)).gap(px(6.))
 }
 
 /// AppKit push-button depth: a 0.5pt drop at low opacity (light mode only;
@@ -247,13 +257,11 @@ pub fn popup<T: Copy + PartialEq + 'static>(
         .h(px(24.))
         .pl(px(10.))
         .pr(px(5.))
-        .rounded_full()
-        .bg(theme::button())
-        .shadow(bezel_shadow())
+        .relative()
+        .child(squircle::surface(Surface::fill(theme::button()).pressed(theme::button_hover())))
         .flex_shrink_0()
         .text_size(px(theme::BODY))
         .text_color(theme::text())
-        .active(|s| s.bg(theme::button_hover()))
         .child(label)
         .child(icon(icons::CHEVRON_UPDOWN, 10., theme::muted()))
         .on_click({
@@ -557,6 +565,23 @@ pub fn day_label(day: chrono::NaiveDate, today: chrono::NaiveDate) -> String {
     } else {
         day.format("%a, %b %-d, %Y").to_string()
     }
+}
+
+/// Borderless round toolbar icon button (hover wash only, continuous curve),
+/// the same height as the toolbar's push buttons.
+pub fn toolbar_icon_button(id: impl Into<ElementId>, s: Sym, label: &'static str) -> Stateful<Div> {
+    div()
+        .id(id)
+        .relative()
+        .size(px(TOOLBAR_H))
+        .flex()
+        .flex_shrink_0()
+        .items_center()
+        .justify_center()
+        .role(gpui::Role::Button)
+        .aria_label(label)
+        .child(squircle::surface(Surface::clear().hover(theme::hover()).pressed(theme::button_hover())))
+        .child(icon(s, 14., theme::muted()))
 }
 
 /// Small borderless icon button (row and card actions), with an accessible
