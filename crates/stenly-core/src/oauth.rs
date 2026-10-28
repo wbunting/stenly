@@ -75,6 +75,20 @@ pub fn loopback() -> Result<(TcpListener, String)> {
     Ok((listener, uri))
 }
 
+/// A loopback listener on the first free port of `ports`, for providers whose
+/// redirect URIs are registered ahead of time (no dynamic registration).
+/// Returns the listener and `http://127.0.0.1:<port><path>`.
+pub fn loopback_fixed(ports: &[u16], path: &str) -> Result<(TcpListener, String)> {
+    let mut last = None;
+    for &p in ports {
+        match TcpListener::bind(("127.0.0.1", p)) {
+            Ok(l) => return Ok((l, format!("http://127.0.0.1:{p}{path}"))),
+            Err(e) => last = Some(e),
+        }
+    }
+    Err(anyhow::anyhow!("ports {ports:?} are in use (is another sign-in open?): {}", last.map(|e| e.to_string()).unwrap_or_default()))
+}
+
 /// Dynamic client registration (RFC 7591) for a public client; returns the client id.
 pub fn register_client(agent: &ureq::Agent, registration_endpoint: &str, client_name: &str, redirect_uri: &str) -> Result<String> {
     let reg: Value = agent
@@ -97,12 +111,22 @@ pub fn register_client(agent: &ureq::Agent, registration_endpoint: &str, client_
 /// return the authorization code. `service` names the other side on the
 /// success page and in errors ("Kody").
 pub fn wait_for_code(listener: &TcpListener, state: &str, service: &str) -> Result<String> {
+    wait_for_code_at(listener, "/callback", state, service, Duration::from_secs(300), &|| false)
+}
+
+/// [`wait_for_code`] for a redirect to `path`, giving up after `timeout` or
+/// as soon as `cancelled()` returns true.
+pub fn wait_for_code_at(listener: &TcpListener, path: &str, state: &str, service: &str, timeout: Duration, cancelled: &dyn Fn() -> bool) -> Result<String> {
     use std::io::{BufRead, BufReader, Write};
+    let callback = path;
     listener.set_nonblocking(true)?;
-    let deadline = std::time::Instant::now() + Duration::from_secs(300);
+    let deadline = std::time::Instant::now() + timeout;
     loop {
         if std::time::Instant::now() > deadline {
             bail!("sign-in timed out");
+        }
+        if cancelled() {
+            bail!("sign-in cancelled");
         }
         let (mut stream, _) = match listener.accept() {
             Ok(s) => s,
@@ -116,7 +140,7 @@ pub fn wait_for_code(listener: &TcpListener, state: &str, service: &str) -> Resu
         let mut line = String::new();
         BufReader::new(&stream).read_line(&mut line)?;
         let path = line.split_whitespace().nth(1).unwrap_or("");
-        if !path.starts_with("/callback") {
+        if path.split('?').next() != Some(callback) {
             let _ = stream.write_all(b"HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\n\r\n");
             continue;
         }

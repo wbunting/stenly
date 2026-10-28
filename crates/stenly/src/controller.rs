@@ -117,6 +117,9 @@ pub struct Controller {
     pub cli_tools: Vec<stenly_core::cli_llm::Detected>,
     pub cli_checked: bool,
     pub cli_test: ApiTest,
+    pub chatgpt: ChatGptState,
+    /// Set to abandon a sign-in that's waiting for the browser.
+    chatgpt_cancel: Arc<std::sync::atomic::AtomicBool>,
     /// Latest Recent-list read (see [`Controller::refresh_recent`]).
     recent_task: Option<Task<()>>,
     /// A recording that has stopped but is still being finalized.
@@ -207,6 +210,18 @@ pub fn describe_event(e: &stenly_agent::agent::Event) -> Option<String> {
     }
 }
 
+/// Sign in with ChatGPT (Settings → Summaries, onboarding).
+#[derive(Clone, Debug, Default, PartialEq)]
+pub enum ChatGptState {
+    #[default]
+    SignedOut,
+    /// The browser is open; waiting for it to come back.
+    SigningIn,
+    /// "alex@example.com · Plus"
+    SignedIn(String),
+    Failed(String),
+}
+
 #[derive(Clone, Debug, Default, PartialEq)]
 pub enum ApiTest {
     #[default]
@@ -280,6 +295,11 @@ impl Controller {
             cli_tools: vec![],
             cli_checked: false,
             cli_test: ApiTest::Idle,
+            chatgpt: match stenly_core::chatgpt::signed_in() {
+                Some(a) => ChatGptState::SignedIn(a.label()),
+                None => ChatGptState::SignedOut,
+            },
+            chatgpt_cancel: Arc::default(),
             recent_task: None,
             finishing: None,
             context: ContextState::default(),
@@ -1531,6 +1551,91 @@ impl Controller {
                 c.cli_test = match r {
                     Ok(ms) => ApiTest::Ok(format!("Signed in · answered in {:.1} s", ms as f32 / 1000.0)),
                     Err(e) => ApiTest::Failed(format!("{e:#}")),
+                };
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    // ---- Sign in with ChatGPT
+    /// Open the browser to sign in; on success, summaries use the ChatGPT plan.
+    pub fn sign_in_chatgpt(&mut self, cx: &mut Context<Self>) {
+        if self.chatgpt == ChatGptState::SigningIn {
+            return;
+        }
+        self.chatgpt = ChatGptState::SigningIn;
+        self.api_test = ApiTest::Idle;
+        let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        self.chatgpt_cancel = cancel.clone();
+        cx.notify();
+        let (url_tx, url_rx) = crossbeam_channel::bounded::<String>(1);
+        let work = cx.background_spawn(async move {
+            stenly_core::chatgpt::sign_in(&|u| {
+                let _ = url_tx.send(u.to_string());
+            }, &|| cancel.load(std::sync::atomic::Ordering::Relaxed))
+        });
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
+            let opener = async {
+                loop {
+                    cx.background_executor().timer(Duration::from_millis(100)).await;
+                    if let Ok(u) = url_rx.try_recv() {
+                        let _ = cx.update(|cx| cx.open_url(&u));
+                    }
+                }
+            };
+            let result = futures_race(work, opener).await;
+            let _ = this.update(cx, |c, cx| {
+                match result {
+                    Ok(account) => {
+                        c.chatgpt = ChatGptState::SignedIn(account.label());
+                        c.set("llm.provider", "chatgpt", cx);
+                        cx.activate(true);
+                    }
+                    Err(e) if format!("{e}").contains("cancelled") => c.chatgpt = ChatGptState::SignedOut,
+                    Err(e) => c.chatgpt = ChatGptState::Failed(format!("{e:#}")),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn cancel_chatgpt_sign_in(&mut self, cx: &mut Context<Self>) {
+        self.chatgpt_cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.chatgpt = ChatGptState::SignedOut;
+        cx.notify();
+    }
+
+    /// Forget the sign-in. Summaries stay on "chatgpt" (and say to sign in)
+    /// until the user picks another provider.
+    pub fn sign_out_chatgpt(&mut self, cx: &mut Context<Self>) {
+        if let Err(e) = stenly_core::chatgpt::sign_out() {
+            self.last_error = Some(format!("{e:#}"));
+        }
+        self.chatgpt = ChatGptState::SignedOut;
+        self.api_test = ApiTest::Idle;
+        cx.notify();
+    }
+
+    /// One tiny request on the ChatGPT plan.
+    pub fn test_chatgpt(&mut self, cx: &mut Context<Self>) {
+        let mut llm = self.config.llm.clone();
+        llm.provider = "chatgpt".into();
+        let target = llm.target(|| None);
+        self.api_test = ApiTest::Running;
+        cx.notify();
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
+            let r = cx.background_spawn(async move { stenly_core::summary::ping(&target) }).await;
+            let _ = this.update(cx, |c, cx| {
+                c.api_test = match r {
+                    Ok(ms) => ApiTest::Ok(format!("Connected · answered in {:.1} s", ms as f32 / 1000.0)),
+                    Err(e) => {
+                        if stenly_core::chatgpt::signed_in().is_none() {
+                            c.chatgpt = ChatGptState::SignedOut;
+                        }
+                        ApiTest::Failed(format!("{e:#}"))
+                    }
                 };
                 cx.notify();
             });

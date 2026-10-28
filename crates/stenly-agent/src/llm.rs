@@ -104,6 +104,9 @@ impl ChatModel for OpenAiChat {
         let t = &self.target;
         anyhow::ensure!(t.cli.is_none(), "this model can't call tools; the context agent needs a hosted API or custom model (Settings → Context)");
         anyhow::ensure!(!t.endpoint.is_empty() && !t.model.is_empty(), "no model set up for context (Settings → Context)");
+        if t.backend == stenly_core::config::Backend::ChatGpt {
+            return chatgpt_turn(t, messages, tools, self.timeout_secs);
+        }
         let url = format!("{}/chat/completions", t.endpoint);
         let mut body = json!({
             "model": t.model,
@@ -144,6 +147,45 @@ impl ChatModel for OpenAiChat {
     }
 }
 
+/// One turn on the ChatGPT backend (Responses API): the conversation becomes
+/// Responses input items, tool calls come back as `function_call` items.
+fn chatgpt_turn(t: &LlmTarget, messages: &[Message], tools: &[ToolSpec], timeout_secs: u64) -> Result<Message> {
+    let input = to_responses_input(messages);
+    let tools: Vec<Value> = tools.iter().map(|s| json!({ "type": "function", "name": s.name, "description": s.description, "parameters": s.parameters, "strict": false })).collect();
+    let reply = stenly_core::chatgpt::respond(t, input, &tools, timeout_secs).map_err(|e| e.context("the context model (ChatGPT) failed"))?;
+    let tool_calls = reply
+        .calls
+        .into_iter()
+        .enumerate()
+        .map(|(i, c)| ToolCall { id: if c.call_id.is_empty() { format!("call_{i}") } else { c.call_id }, kind: function_type(), function: FunctionCall { name: c.name, arguments: c.arguments } })
+        .collect();
+    let text = stenly_core::summary::strip_think(&reply.text).trim().to_string();
+    Ok(Message { role: "assistant".into(), content: Some(text).filter(|s| !s.is_empty()), tool_calls, tool_call_id: None })
+}
+
+/// Chat messages as Responses API input items.
+pub fn to_responses_input(messages: &[Message]) -> Vec<Value> {
+    use stenly_core::chatgpt::message;
+    let mut out = Vec::new();
+    for m in messages {
+        let text = m.content.as_deref().unwrap_or("");
+        match m.role.as_str() {
+            "system" => out.push(message("developer", text)),
+            "tool" => out.push(json!({ "type": "function_call_output", "call_id": m.tool_call_id.clone().unwrap_or_default(), "output": text })),
+            "assistant" => {
+                if !text.is_empty() {
+                    out.push(message("assistant", text));
+                }
+                for c in &m.tool_calls {
+                    out.push(json!({ "type": "function_call", "call_id": c.id, "name": c.function.name, "arguments": c.function.arguments }));
+                }
+            }
+            _ => out.push(message("user", text)),
+        }
+    }
+    out
+}
+
 /// The assistant message from a chat completion response.
 pub fn parse_reply(text: &str) -> Result<Message> {
     let v: Value = serde_json::from_str(text).context("the model's reply wasn't JSON")?;
@@ -179,6 +221,22 @@ mod tests {
         // round-trips as an OpenAI assistant message
         let back = serde_json::to_value(&m).unwrap();
         assert_eq!(back["tool_calls"][0]["type"], "function");
+    }
+
+    #[test]
+    fn conversation_maps_to_responses_items() {
+        let call = ToolCall { id: "call_1".into(), kind: function_type(), function: FunctionCall { name: "past__search".into(), arguments: "{\"q\":\"x\"}".into() } };
+        let msgs = vec![
+            Message::system("Find background."),
+            Message::user("Meeting: Sync"),
+            Message { role: "assistant".into(), content: None, tool_calls: vec![call], tool_call_id: None },
+            Message::tool("call_1", "3 results"),
+        ];
+        let items = to_responses_input(&msgs);
+        assert_eq!(items[0]["role"], "developer");
+        assert_eq!(items[1]["content"][0]["type"], "input_text");
+        assert_eq!(items[2], json!({"type": "function_call", "call_id": "call_1", "name": "past__search", "arguments": "{\"q\":\"x\"}"}));
+        assert_eq!(items[3], json!({"type": "function_call_output", "call_id": "call_1", "output": "3 results"}));
     }
 
     #[test]

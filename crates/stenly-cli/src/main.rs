@@ -97,6 +97,12 @@ enum Cmd {
     },
     /// List Google calendars available through Kody.
     KodyCalendars,
+    /// Sign in with ChatGPT in your browser; summaries then use your ChatGPT plan.
+    ChatgptLogin,
+    /// Forget the ChatGPT sign-in.
+    ChatgptLogout,
+    /// Show the ChatGPT sign-in and send one tiny test request.
+    ChatgptStatus,
     /// Which apps are currently using the microphone (and which display their window is on).
     MicUsers,
     /// Debug: which display an app's main window is on (bundle id or pid:N).
@@ -488,6 +494,27 @@ fn main() -> Result<()> {
             })?;
             Config::set_value("calendar.kody_url", auth.base_url.as_str().into())?;
             eprintln!("connected to {}", auth.base_url);
+        }
+        Cmd::ChatgptLogin => {
+            let acct = stenly_core::chatgpt::sign_in(&|u| {
+                eprintln!("opening browser… if nothing happens, visit:\n{u}");
+                let _ = std::process::Command::new(if cfg!(target_os = "macos") { "open" } else { "xdg-open" }).arg(u).status();
+            }, &|| false)?;
+            Config::set_value("llm.provider", "chatgpt".into())?;
+            eprintln!("signed in as {}; summaries now use ChatGPT ({})", acct.label(), cfg.llm.chatgpt.model);
+        }
+        Cmd::ChatgptLogout => {
+            stenly_core::chatgpt::sign_out()?;
+            eprintln!("signed out of ChatGPT");
+        }
+        Cmd::ChatgptStatus => {
+            let acct = stenly_core::chatgpt::signed_in().context("not signed in; run `stenly-cli chatgpt-login`")?;
+            let mut llm = cfg.llm.clone();
+            llm.provider = "chatgpt".into();
+            let target = llm.target(|| None);
+            eprintln!("signed in as {} · provider {} · model {}", acct.label(), cfg.llm.provider, target.model);
+            let ms = stenly_core::summary::ping(&target)?;
+            eprintln!("ChatGPT answered in {:.1} s", ms as f32 / 1000.0);
         }
         Cmd::KodyCalendars => {
             let mut c = stenly_core::kody::KodyClient::from_saved().context("not signed in; run `stenly-cli kody-login`")?;
