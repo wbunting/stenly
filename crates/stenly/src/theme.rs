@@ -246,6 +246,13 @@ pub fn hex(s: &str) -> Rgba {
     rgb(v)
 }
 
+// ---------------------------------------------------------------- corners
+/// Concentric corner: a shape `gap` points inside a container with corner
+/// `outer` keeps the same curve centre, so their edges stay parallel.
+pub fn concentric(outer: f32, gap: f32) -> f32 {
+    (outer - gap).max(4.)
+}
+
 // ---------------------------------------------------------------- type scale
 // macOS built-in text styles (points): large title 26, title1 22, title2 17,
 // title3 15, headline 13 bold, body 13, callout 12, subheadline 11,
