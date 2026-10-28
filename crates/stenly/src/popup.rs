@@ -142,12 +142,14 @@ fn join_button(prompt: &Prompt) -> Option<gpui::Stateful<gpui::Div>> {
     let Prompt::Upcoming(event) = prompt else { return None };
     let link = event.link.as_ref()?;
     let url = link.url.clone();
-    Some(crate::ui::button_lead_icon(
-        "join-meeting",
-        format!("Join {}", link.provider.label()),
-        crate::ui::Btn::Primary,
-        crate::icons::VIDEO,
-    ).on_click(move |_, window, cx| {
+    let label = format!("Join {}", link.provider.label());
+    // Lead with the call app's own logo (Zoom, Meet, Teams) so the target is
+    // recognisable at a glance; other providers keep the neutral video glyph.
+    let button = match crate::icons::provider_logo(link.provider, 16.) {
+        Some(logo) => crate::ui::button_lead_image("join-meeting", label, crate::ui::Btn::Primary, logo.rounded(px(3.))),
+        None => crate::ui::button_lead_icon("join-meeting", label, crate::ui::Btn::Primary, crate::icons::VIDEO),
+    };
+    Some(button.on_click(move |_, window, cx| {
         cx.open_url(&url);
         window.remove_window();
     }))
