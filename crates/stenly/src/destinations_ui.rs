@@ -533,7 +533,7 @@ pub fn send_button(ui: &Entity<DestUi>, dir: PathBuf, meta: &SessionMeta, cx: &A
         .flex()
         .items_center()
         .child(
-            ui::button_lead_icon("send-to", "Send to…", Btn::Ghost, icons::PAPERPLANE).h(px(32.)).px(px(14.)).rounded_full().on_click(move |e, window, cx| {
+            ui::toolbar_push(ui::button_lead_icon("send-to", "Send to…", Btn::Ghost, icons::PAPERPLANE)).on_click(move |e, window, cx| {
                 let pos = e.mouse_position().unwrap_or_else(|| window.mouse_position());
                 let view = ui::native_view(window);
                 let (entries, ids, ui, dir) = (entries.clone(), ids.clone(), ui.clone(), dir.clone());
