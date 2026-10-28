@@ -77,6 +77,8 @@ pub struct MainWindow {
     api_endpoint: Entity<TextInput>,
     api_model: Entity<TextInput>,
     api_key: Entity<TextInput>,
+    cli_model: Entity<TextInput>,
+    cli_path: Entity<TextInput>,
     jargon: Entity<TextInput>,
     /// Settings → You.
     me_name: Entity<TextInput>,
@@ -256,6 +258,9 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                     let api_endpoint = field(cx, "https://api.openai.com/v1", &api_cfg.endpoint);
                     let api_model = field(cx, "gpt-5-mini", &api_cfg.model);
                     let api_key = cx.new(|cx| TextInput::new(cx, if has_key { "Saved in Keychain · type to replace" } else { "sk-…" }).masked());
+                    let cli_cfg = controller.read(cx).config.llm.cli.clone();
+                    let cli_model = field(cx, "Default model", &cli_cfg.model);
+                    let cli_path = field(cx, "Found automatically", &cli_cfg.path);
                     let jargon = cx.new(|cx| TextInput::new(cx, "Add a term and press Return"));
                     let me_cfg = controller.read(cx).config.me.clone();
                     let me_name = field(cx, "Your name, as meeting apps show it", &me_cfg.name);
@@ -315,6 +320,36 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                             ctrl.update(cx, |c, cx| c.add_to_list(key, &new, cx));
                             input.update(cx, |t, cx| t.set_text("", cx));
                         }));
+                    }
+                    for (input, key) in [(cli_model.clone(), "llm.cli.model"), (cli_path.clone(), "llm.cli.path")] {
+                        let save = {
+                            let ctrl = controller.clone();
+                            let input = input.clone();
+                            move |cx: &mut App| {
+                                let v = input.read(cx).text().trim().to_string();
+                                let cur = {
+                                    let c = &ctrl.read(cx).config.llm.cli;
+                                    if key.ends_with("path") { c.path.clone() } else { c.model.clone() }
+                                };
+                                if v != cur {
+                                    ctrl.update(cx, |c, cx| {
+                                        c.set(key, v.as_str(), cx);
+                                        c.cli_test = crate::controller::ApiTest::Idle;
+                                        if key.ends_with("path") {
+                                            c.refresh_cli_tools(cx);
+                                        }
+                                    });
+                                }
+                            }
+                        };
+                        let save2 = save.clone();
+                        subs.push(cx.subscribe(&input, move |_, _, ev: &InputEvent, cx| {
+                            if matches!(ev, InputEvent::Submit) {
+                                save(cx)
+                            }
+                        }));
+                        let fh = input.read(cx).focus_handle(cx);
+                        subs.push(cx.on_blur(&fh, window, move |_, _, cx| save2(cx)));
                     }
                     for (input, key) in [(api_endpoint.clone(), "llm.api.endpoint"), (api_model.clone(), "llm.api.model")] {
                         let save = {
@@ -496,6 +531,8 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                         api_endpoint,
                         api_model,
                         api_key,
+                        cli_model,
+                        cli_path,
                         jargon,
                         me_name,
                         me_email,
@@ -2338,20 +2375,46 @@ impl MainWindow {
         };
 
         let uses_api = cfg.llm.uses_api();
+        let uses_cli = cfg.llm.uses_cli();
+        let cli_tool = stenly_core::cli_llm::Tool::parse(&cfg.llm.cli.tool);
+        let (cli_found, cli_checked) = {
+            let c = self.controller.read(cx);
+            (c.cli_tools.iter().map(|d| d.tool).collect::<Vec<_>>(), c.cli_checked)
+        };
+        // 0 Ollama, 1 API, 2 Codex, 3 Claude Code. A tool is offered when it is installed (or already chosen).
+        let source_now: u8 = if uses_cli { if cli_tool == Some(stenly_core::cli_llm::Tool::Claude) { 3 } else { 2 } } else if uses_api { 1 } else { 0 };
         let source_row = {
             let ctrl = self.controller.clone();
+            use stenly_core::cli_llm::Tool;
+            let mut opts: Vec<(u8, &'static str)> = vec![(0, "Ollama on this Mac"), (1, "An API (OpenAI-compatible)")];
+            if cli_found.contains(&Tool::Codex) || source_now == 2 {
+                opts.push((2, "Codex (OpenAI)"));
+            }
+            if cli_found.contains(&Tool::Claude) || source_now == 3 {
+                opts.push((3, "Claude Code (Anthropic)"));
+            }
+            let desc: SharedString = match source_now {
+                1 => "A hosted model. Your transcript is sent to it; audio never leaves this Mac.".into(),
+                2 | 3 => stenly_core::cli_llm::Tool::parse(&cfg.llm.cli.tool).unwrap_or(Tool::Codex).disclosure().into(),
+                _ => "A model running in Ollama on this Mac. Nothing leaves it.".into(),
+            };
             ui::row(
                 None,
                 "Write summaries with",
-                Some(if uses_api { "A hosted model. Your transcript is sent to it; audio never leaves this Mac.".into() } else { "A model running in Ollama on this Mac. Nothing leaves it.".into() }),
-                ui::popup("llm-source", &[(false, "Ollama on this Mac"), (true, "An API (OpenAI-compatible)")], uses_api, move |api, cx| {
-                    ctrl.update(cx, |c, cx| c.set("llm.provider", if api { "api" } else { "ollama" }, cx))
+                Some(desc),
+                ui::popup("llm-source", &opts, source_now, move |v, cx| {
+                    ctrl.update(cx, |c, cx| match v {
+                        2 => c.use_cli_tool(Tool::Codex, cx),
+                        3 => c.use_cli_tool(Tool::Claude, cx),
+                        v => c.set("llm.provider", if v == 1 { "api" } else { "ollama" }, cx),
+                    })
                 }),
             )
             .into_any_element()
         };
 
         let api_card = uses_api.then(|| self.api_card(&cfg, cx));
+        let cli_card = uses_cli.then(|| self.cli_card(&cfg, cli_checked, cx));
         let jargon_card = self.jargon_card(&cfg);
 
         if asr {
@@ -2383,8 +2446,9 @@ impl MainWindow {
             .child(ui::caption("Model"))
             .child(ui::card(vec![source_row]))
             .when_some(api_card, |d, card| d.child(ui::caption("API")).child(card))
-            .when(!uses_api, |d| d.child(ui::caption("Ollama")).child(ollama_banner).child(div().pt(px(if ollama.running { 0. } else { 8. })).child(ui::card(llm_cards))))
-            .when(!uses_api && !extra.is_empty(), |d| {
+            .when_some(cli_card, |d, card| d.child(ui::caption("Command-line tool")).child(card))
+            .when(!uses_api && !uses_cli, |d| d.child(ui::caption("Ollama")).child(ollama_banner).child(div().pt(px(if ollama.running { 0. } else { 8. })).child(ui::card(llm_cards))))
+            .when(!uses_api && !uses_cli && !extra.is_empty(), |d| {
                 let rows = extra
                     .into_iter()
                     .enumerate()
@@ -2411,6 +2475,55 @@ impl MainWindow {
                 d.child(ui::caption("Other Ollama Models")).child(ui::card(rows))
             })
             .into_any_element()
+    }
+
+    /// Settings → Summaries when Codex / Claude Code writes the notes: which install, model, test.
+    fn cli_card(&self, cfg: &stenly_core::config::Config, checked: bool, cx: &mut Context<Self>) -> gpui::Div {
+        use stenly_core::cli_llm::Tool;
+        let c = self.controller.read(cx);
+        let test = c.cli_test.clone();
+        let tool = Tool::parse(&cfg.llm.cli.tool).unwrap_or(Tool::Codex);
+        let found = c.cli_tool(tool).cloned();
+        let field_row = |label: &'static str, input: Entity<TextInput>| {
+            div()
+                .flex()
+                .items_center()
+                .gap(px(12.))
+                .min_h(px(44.))
+                .child(div().w(px(84.)).flex_shrink_0().text_size(px(theme::BODY)).child(label))
+                .child(ui::text_field(input))
+                .into_any_element()
+        };
+        // fixed-height status row so finding (or not finding) the tool doesn't move what is below
+        let install: AnyElement = match (&found, checked) {
+            (Some(d), _) => div().flex().items_center().gap(px(5.)).text_color(theme::muted()).child(icon(icons::CHECK, 11., theme::green())).child(div().flex_1().min_w_0().truncate().child(stenly_core::cli_llm::describe(d))).into_any_element(),
+            (None, true) => div().flex().items_center().gap(px(5.)).text_color(theme::muted()).child(icon(icons::ALERT, 11., theme::amber())).child(div().flex_1().min_w_0().child(format!("{} wasn't found. Install it, or enter its path below.", tool.label()))).into_any_element(),
+            (None, false) => ui::pending("cli-finding", "Looking…").into_any_element(),
+        };
+        let install_row = div().flex().items_center().gap(px(12.)).min_h(px(44.)).text_size(px(theme::SUBHEAD)).child(div().w(px(84.)).flex_shrink_0().text_size(px(theme::BODY)).text_color(theme::text()).child(tool.label())).child(div().flex_1().min_w_0().child(install)).into_any_element();
+        let status: AnyElement = match &test {
+            crate::controller::ApiTest::Idle => div().text_color(theme::muted()).child(format!("Uses {}'s own sign-in; Stenly never sees a token.", tool.label())).into_any_element(),
+            crate::controller::ApiTest::Running => ui::pending("cli-testing", "Testing…").into_any_element(),
+            crate::controller::ApiTest::Ok(m) => div().flex().items_center().gap(px(5.)).text_color(theme::muted()).child(icon(icons::CHECK, 11., theme::green())).child(m.clone()).into_any_element(),
+            crate::controller::ApiTest::Failed(e) => div().flex().items_center().gap(px(5.)).text_color(theme::muted()).child(icon(icons::ALERT, 11., theme::amber())).child(div().flex_1().min_w_0().child(e.clone())).into_any_element(),
+        };
+        let test_row = {
+            let ctrl = self.controller.clone();
+            div()
+                .flex()
+                .items_center()
+                .gap(px(12.))
+                .min_h(px(44.))
+                .child(div().flex_1().min_w_0().text_size(px(theme::SUBHEAD)).child(status))
+                .child(ui::button("cli-test", "Test", Btn::Outline).on_click(move |_, window, cx| {
+                    window.blur(cx);
+                    let ctrl = ctrl.clone();
+                    cx.defer(move |cx| ctrl.update(cx, |c, cx| c.test_cli(cx)));
+                }))
+                .into_any_element()
+        };
+        let note = div().min_h(px(36.)).py(px(8.)).text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child("Runs the tool with no file or tool access, in an empty temporary folder. The context agent needs a tool-calling model, so it can't use this one.").into_any_element();
+        ui::card(vec![install_row, field_row("Model", self.cli_model.clone()), field_row("Path", self.cli_path.clone()), test_row, note])
     }
 
     fn api_card(&self, cfg: &stenly_core::config::Config, cx: &mut Context<Self>) -> gpui::Div {

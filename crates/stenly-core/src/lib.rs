@@ -7,6 +7,7 @@
 
 pub mod audio;
 pub mod calendar;
+pub mod cli_llm;
 pub mod config;
 pub mod context;
 pub mod daemon;

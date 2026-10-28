@@ -244,7 +244,7 @@ impl MainWindow {
             {
                 let c = self.controller().read(cx);
                 let default_ollama = stenly_core::ollama::api_base(&c.config.llm.endpoint) == "http://localhost:11434";
-                if !c.config.llm.enabled { "Turn on summaries" } else if !c.config.llm.uses_api() && default_ollama && !c.ollama.running { "Set up summaries" } else { "Summarize now" }
+                if !c.config.llm.enabled { "Turn on summaries" } else if c.config.llm.uses_ollama() && default_ollama && !c.ollama.running { "Set up summaries" } else { "Summarize now" }
             },
             cx.listener(|this, _, _, cx| {
                 let setup_page = {
@@ -254,7 +254,7 @@ impl MainWindow {
                     // endpoint (llama.cpp, LM Studio, vLLM) is allowed through
                     // to the backend-neutral pipeline probe.
                     let default_ollama = stenly_core::ollama::api_base(&c.config.llm.endpoint) == "http://localhost:11434";
-                    if !c.config.llm.enabled { Some(Page::Preferences) } else if !c.config.llm.uses_api() && default_ollama && !c.ollama.running { Some(Page::Summaries) } else { None }
+                    if !c.config.llm.enabled { Some(Page::Preferences) } else if c.config.llm.uses_ollama() && default_ollama && !c.ollama.running { Some(Page::Summaries) } else { None }
                 };
                 if let Some(page) = setup_page {
                     this.go(page, cx);

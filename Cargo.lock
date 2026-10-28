@@ -6309,6 +6309,7 @@ dependencies = [
  "directories",
  "getrandom 0.3.4",
  "hound",
+ "libc",
  "regex",
  "rrule",
  "serde",

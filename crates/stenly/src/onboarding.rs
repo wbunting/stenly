@@ -40,7 +40,7 @@ pub fn open(controller: Entity<Controller>, cx: &mut App) -> Option<WindowHandle
     // A Dock icon while setting up: system permission prompts otherwise leave
     // an accessory app stranded behind other windows.
     controller.read(cx).shell.set_foreground_app();
-    let bounds = Bounds::centered(None, size(px(720.), px(620.)), cx);
+    let bounds = Bounds::centered(None, size(px(720.), px(720.)), cx);
     let h = cx
         .open_window(
             WindowOptions {
@@ -424,7 +424,9 @@ impl Onboarding {
         };
         let asr = stenly_asr::models::find(&cfg.asr.model).unwrap_or(&stenly_asr::models::MODELS[0]);
         let uses_api = cfg.llm.uses_api();
+        let uses_cli = cfg.llm.uses_cli();
         let ctrl = self.controller.clone();
+        let cli_tools = self.controller.read(cx).cli_tools.clone();
 
         let asr_status: AnyElement = if let Some(d) = asr_dl {
             div().flex().flex_col().items_end().gap(px(6.)).child(div().text_size(px(12.)).text_color(theme::muted()).child(format!("{:.0}%", d.fraction.max(0.0) * 100.0))).child(ui::progress_bar(d.fraction, 120.)).into_any_element()
@@ -457,14 +459,38 @@ impl Onboarding {
         };
         let select_local = {
             let ctrl = ctrl.clone();
-            ui::button("ob-use-local", if uses_api { "Use Local" } else { "Selected" }, if uses_api { Btn::Outline } else { Btn::Ghost })
-                .when(uses_api, |b| b.on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.set("llm.provider", "ollama", cx))))
+            let other = uses_api || uses_cli;
+            ui::button("ob-use-local", if other { "Use Local" } else { "Selected" }, if other { Btn::Outline } else { Btn::Ghost })
+                .when(other, |b| b.on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.set("llm.provider", "ollama", cx))))
         };
         let select_api = {
             let ctrl = ctrl.clone();
             ui::button("ob-use-api", if uses_api { "Selected" } else { "Use Cloud" }, if uses_api { Btn::Ghost } else { Btn::Outline })
                 .when(!uses_api, |b| b.on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.set("llm.provider", "api", cx))))
         };
+        // Codex / Claude Code, when installed: their own sign-in pays, Stenly holds no token.
+        let cli_rows: Vec<AnyElement> = cli_tools
+            .iter()
+            .map(|d| {
+                let tool = d.tool;
+                let selected = uses_cli && stenly_core::cli_llm::Tool::parse(&cfg.llm.cli.tool).is_none_or(|t| t == tool);
+                let ctrl = ctrl.clone();
+                let id: &'static str = match tool {
+                    stenly_core::cli_llm::Tool::Codex => "ob-use-codex",
+                    stenly_core::cli_llm::Tool::Claude => "ob-use-claude",
+                };
+                let label = if selected { "Selected".to_string() } else { format!("Use {}", tool.label()) };
+                ui::row(
+                    Some(icons::CODE),
+                    format!("{} · {}", tool.label(), tool.vendor()),
+                    Some("Already installed here. Uses the account it is signed in to.".into()),
+                    ui::button(id, label, if selected { Btn::Ghost } else { Btn::Outline })
+                        .when(!selected, |b| b.on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.use_cli_tool(tool, cx)))),
+                )
+                .into_any_element()
+            })
+            .collect();
+        let chosen_cli = stenly_core::cli_llm::Tool::parse(&cfg.llm.cli.tool).or_else(|| cli_tools.first().map(|d| d.tool));
         const PRESETS: &[(&str, &str, &str)] = &[
             ("OpenAI", "https://api.openai.com/v1", "gpt-5-mini"),
             ("Anthropic", "https://api.anthropic.com/v1", "claude-sonnet-4-6"),
@@ -514,7 +540,8 @@ impl Onboarding {
                 ui::row(Some(icons::SPARKLES), "Local · Ollama", Some("Summaries stay on this Mac.".into()), select_local).into_any_element(),
                 div().px(px(16.)).pb(px(12.)).child(local_detail).child(div().pt(px(8.)).child(local_action)).into_any_element(),
                 ui::row(Some(icons::LOCK), "Cloud · your API key", Some("Use an OpenAI-compatible provider.".into()), select_api).into_any_element(),
-            ]))
+            ].into_iter().chain(cli_rows).collect()))
+            .when_some(chosen_cli.filter(|_| uses_cli), |d, tool| d.child(div().px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).line_height(px(17.)).text_color(theme::muted()).child(tool.disclosure())))
             .when(uses_api, |d| d.child(div().px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).line_height(px(17.)).text_color(theme::muted()).child("Your transcript is sent to this provider to write the summary.")).child(api_form))
             .child(div().px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child("You can turn on summaries later in Settings → Summaries."))
             .child(div().flex_1())

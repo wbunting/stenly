@@ -230,6 +230,9 @@ pub fn suggest(target: &LlmTarget, t: &Transcript, ev: Option<&CalendarEvent>, p
 /// One OpenAI-compatible chat call in JSON mode (falls back to plain prompting
 /// for backends that reject `response_format`). Returns the message text.
 fn chat_json(target: &LlmTarget, system: &str, user: &str, timeout_secs: u64) -> Result<String> {
+    if let Some(spec) = &target.cli {
+        return Ok(crate::cli_llm::run(spec, Some(system), user, timeout_secs.max(30))?);
+    }
     anyhow::ensure!(!target.endpoint.is_empty() && !target.model.is_empty(), "no AI model set up");
     let call = |json_mode: bool| -> Result<serde_json::Value, ureq::Error> {
         let mut req = ureq::post(&format!("{}/chat/completions", target.endpoint)).config().timeout_global(Some(std::time::Duration::from_secs(timeout_secs.max(30)))).build();
