@@ -112,6 +112,15 @@ impl Participants {
         }
     }
 
+    /// Invitees the meeting app never showed (empty without a roster: then
+    /// we can't tell who came).
+    pub fn absent(&self) -> Vec<&Person> {
+        if !self.app_roster {
+            return vec![];
+        }
+        self.people.iter().filter(|p| !p.from_app()).collect()
+    }
+
     /// The other person in a one-to-one, when the sources agree there was
     /// exactly one. An invite alone only counts when we know which attendee
     /// is the user (else "two attendees" could be the user plus one other).
@@ -255,10 +264,12 @@ mod tests {
         let e = ev("alex@example.com", &[("Shelley Morgan", "shelley@example.com"), ("Andy Reed", "andy@x.com")]);
         let p = Participants::gather(&alex(), Some(&e), &app(&["Alex Rowan", "Shelley Morgan"], None));
         assert_eq!(p.names(), vec!["Shelley Morgan"]);
+        assert_eq!(p.absent().iter().map(|p| p.name.as_str()).collect::<Vec<_>>(), vec!["Andy Reed"]);
         assert!(p.only_other().is_some());
         // without the app's roster, both invitees count
         let p = Participants::gather(&alex(), Some(&e), &app(&[], None));
         assert_eq!(p.len(), 2);
+        assert!(p.absent().is_empty());
         assert!(p.only_other().is_none());
     }
 

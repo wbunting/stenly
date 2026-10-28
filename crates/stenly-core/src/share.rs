@@ -34,9 +34,8 @@ struct Plaintext<'a> {
 
 /// Build the v1 plaintext JSON from a session.
 pub fn plaintext(payload: &Payload, include_transcript: bool) -> Result<Vec<u8>> {
-    let attendees = payload.meta.event.as_ref().map(|e| e.attendees.iter()
-        .filter(|a| e.calendar.as_deref().is_none_or(|me| !a.email.eq_ignore_ascii_case(me)))
-        .map(|a| Person { name: a.display(), email: a.email.clone() }).collect()).unwrap_or_default();
+    // who was there, not everyone invited
+    let attendees = payload.meta.others().into_iter().map(|a| Person { name: a.name, email: a.email.unwrap_or_default() }).collect();
     let transcript: Option<Vec<Line>> = include_transcript.then(|| payload.transcript.segments.iter().map(|s| Line {
         speaker: crate::destinations::speaker_name(s), start: s.start, text: s.text.clone(),
     }).collect());
@@ -238,5 +237,19 @@ mod tests {
         let value: Value = serde_json::from_slice(&plaintext(&p, true).unwrap()).unwrap();
         assert_eq!(value["transcript"][0]["text"], "Hello");
         assert_eq!(value["transcript"][0]["speaker"], "You");
+    }
+
+    #[test]
+    fn attendees_are_who_came_once_known() {
+        let mut p = crate::destinations::testutil::payload();
+        p.meta = crate::destinations::testutil::meta_with_attendees("me@example.com", &["me@example.com", "andy@example.org", "sam@example.org"]);
+        let names = |p: &Payload| {
+            let v: Value = serde_json::from_slice(&plaintext(p, false).unwrap()).unwrap();
+            v["attendees"].as_array().map(|a| a.iter().map(|x| x["email"].as_str().unwrap().to_string()).collect::<Vec<_>>()).unwrap_or_default()
+        };
+        // before summarizing: the invite, without the user
+        assert_eq!(names(&p), vec!["andy@example.org", "sam@example.org"]);
+        p.meta.attended = Some(vec![crate::session::Attended { name: "Andy".into(), email: Some("andy@example.org".into()) }]);
+        assert_eq!(names(&p), vec!["andy@example.org"]);
     }
 }

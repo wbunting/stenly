@@ -206,7 +206,9 @@ pub fn process_session(
         let mut me = crate::identity::Me::resolve(&cfg.me, meta.event.as_ref(), app.me.as_deref());
         me.locate(&app.roster);
         // everyone else in the meeting, so points and action items get names even when the transcript says "Them"
-        let people: Vec<String> = crate::speakers::participants::Participants::gather(&me, meta.event.as_ref(), &app)
+        let gathered = crate::speakers::participants::Participants::gather(&me, meta.event.as_ref(), &app);
+        let not_present: Vec<String> = gathered.absent().iter().map(|p| p.name.clone()).collect();
+        let people: Vec<String> = gathered
             .present()
             .iter()
             .map(|p| {
@@ -230,11 +232,13 @@ pub fn process_session(
             language: &cfg.llm.language,
             me: me.display(),
             people: &people,
+            not_present: &not_present,
             context: &context,
         };
             match summary::summarize_opts(&cfg.llm, &target, &opts, &meta.title, &transcript) {
                 Ok(mut s) => {
                     s.template = Some(tpl.id.clone());
+                    meta.attended = Some(attended(&gathered, &s.absent));
                     summary::own_action_items(&mut s, &transcript.recorder_label());
                     Some(s)
                 }
@@ -312,6 +316,21 @@ pub fn process_session(
     Ok(Processed { note: path, transcript, summary, sent })
 }
 
+/// Who was in the meeting, for the header, note and share page: the people
+/// the meeting app showed (or, without its roster, everyone invited), minus
+/// anyone the summary found the conversation says wasn't there.
+fn attended(people: &crate::speakers::participants::Participants, absent: &[String]) -> Vec<crate::session::Attended> {
+    use crate::speakers::participants::same_person;
+    people
+        .present()
+        .into_iter()
+        // the model may add a description or the full name in brackets:
+        // "Shelley Morgan (colleague of the recorder)", "Shel (Shelley Morgan)"
+        .filter(|p| !absent.iter().any(|a| a.split(['(', ')', ';', ',']).any(|n| same_person(n, &p.name))))
+        .map(|p| crate::session::Attended { name: p.name.clone(), email: p.email.clone() })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -336,6 +355,22 @@ mod tests {
             "meeting_app": null,
         }))
         .unwrap()
+    }
+
+    #[test]
+    fn attended_drops_who_the_conversation_says_was_absent() {
+        use crate::speakers::{participants::Participants, timeline};
+        let me = crate::identity::Me::from_config(&crate::config::MeConfig { name: "Alex Rowan".into(), emails: vec!["alex@example.com".into()], aliases: vec![], label: String::new(), auto: true });
+        // no roster read: everyone invited counts, until the summary says otherwise
+        let mut ev = crate::destinations::testutil::event("alex@example.com", &["alex@example.com", "shelley@example.com", "andy@example.org"]);
+        ev.attendees[1].name = Some("Shelley Morgan".into());
+        ev.attendees[2].name = Some("Andy Reed".into());
+        let p = Participants::gather(&me, Some(&ev), &timeline::Summary::default());
+        let names = |a: Vec<crate::session::Attended>| a.into_iter().map(|a| a.name).collect::<Vec<_>>();
+        assert_eq!(names(attended(&p, &[])), vec!["Shelley Morgan", "Andy Reed"]);
+        assert_eq!(names(attended(&p, &["Shelley Morgan (colleague of the recorder)".into()])), vec!["Andy Reed"]);
+        assert_eq!(names(attended(&p, &["Andy".into()])), vec!["Shelley Morgan"]);
+        assert_eq!(names(attended(&p, &["Andee (Andy Reed)".into()])), vec!["Shelley Morgan"]);
     }
 
     impl Transcriber for NoopTranscriber {
