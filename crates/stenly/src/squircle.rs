@@ -146,15 +146,10 @@ fn path(mut b: PathBuilder, bounds: Bounds<Pixels>, radius: f32, inset: f32) -> 
     let want = radius * EXTENT;
     let limit = (w / 2.).min(h / 2.).max(0.);
     let e = want.min(limit);
-    // When the shape is too small for the full continuous corner (capsules,
-    // circles), relax toward a circular arc, as AppKit does, instead of
-    // squaring off the ends.
-    let over = if limit > 0. {
-        ((want / limit - 1.) / (EXTENT - 1.)).clamp(0., 1.)
-    } else {
-        1.
-    };
-    let n = EXPONENT - (EXPONENT - 2.) * over;
+    // Keep the continuous curve even when the corner is clamped (capsules,
+    // circles): easing back to a circular arc there made "round" controls
+    // indistinguishable from GPUI's rounded_full().
+    let n = EXPONENT;
     let (x1, y1) = (x0 + w, y0 + h);
     // Corner centres (where the corner's two straight edges would meet the
     // curve's axes) and the quadrant each corner sweeps, clockwise from top-right.
