@@ -23,16 +23,14 @@ pub fn render(meta: &SessionMeta, transcript: &Transcript, summary: Option<&Summ
     let _ = writeln!(md, "title: {}", yaml_str(&meta.title));
     let _ = writeln!(md, "date: {}", meta.started.format("%Y-%m-%dT%H:%M:%S%:z"));
     let _ = writeln!(md, "duration_min: {minutes}");
-    if let Some(ev) = &meta.event {
-        if !ev.attendees.is_empty() {
-            md.push_str("attendees:\n");
-            for a in &ev.attendees {
-                if ev.calendar.as_deref().is_some_and(|me| a.email.eq_ignore_ascii_case(me)) {
-                    continue;
-                }
-                let _ = writeln!(md, "  - {}", yaml_str(&format!("[[{}]]", a.display())));
-            }
+    let others = meta.others();
+    if !others.is_empty() {
+        md.push_str("attendees:\n");
+        for a in &others {
+            let _ = writeln!(md, "  - {}", yaml_str(&format!("[[{}]]", a.name)));
         }
+    }
+    if let Some(ev) = &meta.event {
         if let Some(link) = &ev.link {
             let _ = writeln!(md, "platform: {}", yaml_str(link.provider.label()));
             let _ = writeln!(md, "meeting_url: {}", yaml_str(&link.url));

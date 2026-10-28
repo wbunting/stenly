@@ -627,7 +627,7 @@ mod tests {
             "calendar": "alex@example.com", "declined": false, "recurring": false, "link": null, "organizer": null, "description": null
         }))
         .unwrap();
-        let meta = SessionMeta { title: "Andy / Shelley".into(), started: Local::now(), ended: None, event: Some(ev), state: crate::session::SessionState::Done, note_path: None, error: None, routes: vec![], sends: vec![], shares: vec![], meeting_app: None };
+        let meta = SessionMeta { title: "Andy / Shelley".into(), started: Local::now(), ended: None, event: Some(ev), state: crate::session::SessionState::Done, note_path: None, error: None, routes: vec![], sends: vec![], shares: vec![], meeting_app: None, attended: None };
         let t = Transcript { segments: vec![crate::transcript::Segment::new(crate::platform::Channel::Mic, 0., 1., "hi")], in_person: false, ..Default::default() };
         let r = Library::at(Kind::Recipe, "/nonexistent").get("follow-up-email").unwrap();
         let (sys, user) = recipe_prompt(&r, &meta, &t, None, &[], "Japanese", None);
@@ -662,7 +662,7 @@ mod tests {
             routes: vec![],
             sends: vec![],
             shares: vec![],
-            meeting_app: None,
+            meeting_app: None, attended: None,
         };
         meta.save(dir.path()).unwrap();
         let r = |text: &str| RecipeResult { recipe: "tldr".into(), name: "TL;DR".into(), text: text.into(), model: "m".into(), created: Local::now(), saved_heading: None };

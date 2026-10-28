@@ -92,7 +92,7 @@ pub fn render(
     let m = &d.meta;
     let title = m.title.clone();
     let mins = m.duration_mins().unwrap_or(0);
-    let attendees = m.event.as_ref().map(|e| e.attendees.iter().filter(|a| e.calendar.as_deref().is_none_or(|me| !a.email.eq_ignore_ascii_case(me))).count()).unwrap_or(0);
+    let attendees = m.others().len();
     let platform = m.event.as_ref().and_then(|e| e.link.as_ref()).map(|l| l.provider.label());
 
     let mut body = div().w_full().flex().flex_col();

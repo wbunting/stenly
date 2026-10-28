@@ -73,9 +73,37 @@ pub struct SessionMeta {
     /// holding the mic when recording started, or the windows read during it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub meeting_app: Option<String>,
+    /// Who else was actually in the meeting (the recorder left out), settled
+    /// when it was summarized: the meeting app's roster, the invite, minus
+    /// invitees the conversation says weren't there. `None` until then (and
+    /// for older meetings): fall back to the invite.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub attended: Option<Vec<Attended>>,
+}
+
+/// Someone who was in the meeting.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Attended {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
 }
 
 impl SessionMeta {
+    /// Everyone else in the meeting: who was there once it was summarized,
+    /// else everyone on the invite who didn't decline.
+    pub fn others(&self) -> Vec<Attended> {
+        if let Some(a) = &self.attended {
+            return a.clone();
+        }
+        let Some(ev) = &self.event else { return vec![] };
+        ev.attendees
+            .iter()
+            .filter(|a| ev.calendar.as_deref().is_none_or(|me| !a.email.eq_ignore_ascii_case(me)) && a.status.as_deref() != Some("DECLINED"))
+            .map(|a| Attended { name: a.display(), email: Some(a.email.clone()) })
+            .collect()
+    }
+
     /// Length in whole minutes, rounded; `None` until the recording ends.
     pub fn duration_mins(&self) -> Option<i64> {
         self.ended.map(|e| ((e - self.started).num_seconds().max(0) + 30) / 60)
@@ -361,6 +389,7 @@ impl Recording {
             sends: vec![],
             shares: vec![],
             meeting_app: None,
+            attended: None,
         };
         meta.save(&dir)?;
         tracing::info!(dir = %dir.display(), "recording started");
@@ -554,7 +583,7 @@ mod trash_tests {
             routes: vec![],
             sends: vec![],
             shares: vec![],
-            meeting_app: None,
+            meeting_app: None, attended: None,
         };
         meta.save(&dir).unwrap();
         std::fs::write(dir.join("mic.wav"), b"audio").unwrap();

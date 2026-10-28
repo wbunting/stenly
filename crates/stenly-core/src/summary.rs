@@ -25,6 +25,10 @@ pub struct Summary {
     /// Id of the note template it was written with (`None` = General).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub template: Option<String>,
+    /// Invitees the conversation says weren't there ("Forest couldn't make
+    /// it"), as named in the prompt's people list.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub absent: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -96,7 +100,8 @@ angle-bracket text describes each value; replace it with real content from this 
   ],
   "decisions": [<a decision the participants explicitly made>, ...],
   "action_items": [{"owner": <who will do it, by name; "Them" or a speaker label only when it can't be told>, "task": <what they will do>}, ...],
-  "tags": [<one-or-two-word topic>, ...]
+  "tags": [<one-or-two-word topic>, ...],
+  "absent": [<name, as given under "People in this meeting", of anyone the conversation makes clear was NOT actually there (e.g. "X couldn't make it")>, ...]
 }
 Use empty arrays when there is nothing to report.
 
@@ -280,6 +285,8 @@ pub struct Options<'a> {
     /// Everyone else known to be in the meeting (invite, meeting app), for
     /// attributing points and action items when the transcript only says "Them".
     pub people: &'a [String],
+    /// Invited but not seen in the meeting app: they didn't come.
+    pub not_present: &'a [String],
     /// Background on the meeting ([`crate::context::MeetingContext::prompt_block`]); "" = none.
     pub context: &'a str,
 }
@@ -353,6 +360,18 @@ pub(crate) fn attribution_hint(t: &Transcript, me: Option<&str>, people: &[Strin
         None => h.push_str(&format!("so \"I'll …\" on {mine} is the recorder's (\"{label}\") task and \"I'll …\" on a \"Them\" line is not")),
     }
     h.push_str(". Likewise, facts about a guest's company (its users, stack, plans) belong to that company, not to the recorder's.\n");
+    h
+}
+
+/// Who was there and who wasn't: people the conversation only talks about
+/// (an absent co-founder, a customer) aren't participants.
+pub(crate) fn presence_hint(not_present: &[String]) -> String {
+    let mut h = String::from("PRESENCE. Only people who were in the meeting are participants. Someone who is only talked about (\"my co-founder X couldn't be here\", a customer, a former colleague) was NOT in it: never list them among the participants or attendees, and never write a section about who was in the meeting that includes them; mention them only where what was said about them matters, and say that they weren't there. ");
+    let names: Vec<&str> = not_present.iter().map(|p| p.trim()).filter(|p| !p.is_empty()).collect();
+    if !names.is_empty() {
+        h.push_str(&format!("Invited but did not join (the meeting app never showed them): {}. ", names.join(", ")));
+    }
+    h.push('\n');
     h
 }
 
@@ -479,7 +498,7 @@ impl Hints {
         Hints {
             raw_title: title.to_string(),
             title: title_hint,
-            speakers: format!("{}{}", speakers_hint(transcript, opts.me), attribution_hint(transcript, opts.me, opts.people)),
+            speakers: format!("{}{}{}", speakers_hint(transcript, opts.me), attribution_hint(transcript, opts.me, opts.people), presence_hint(opts.not_present)),
             vocabulary: vocabulary_hint(opts.vocabulary),
             template: opts.template.map(|(n, b)| template_hint(n, b)).unwrap_or_default(),
             language: language_hint(opts.language),
@@ -1025,6 +1044,19 @@ mod tests {
         let (short, long) = (n(detail_hint(20.0)), n(detail_hint(75.0)));
         assert!(long[0] > short[1], "{short:?} {long:?}");
         assert!(detail_hint(75.0).contains("up to 10 sections"));
+    }
+
+    #[test]
+    fn presence_names_who_didnt_come() {
+        let t = Transcript { segments: vec![Segment::new(Channel::Mic, 0.0, 1.0, "hi")], ..Default::default() };
+        let absent = vec!["Andy Reed".to_string()];
+        let h = hints(&t, &Options { not_present: &absent, ..Default::default() });
+        assert!(h.speakers.contains("Invited but did not join (the meeting app never showed them): Andy Reed."));
+        assert!(h.speakers.contains("only talked about"));
+        let h = hints(&t, &Options::default());
+        assert!(!h.speakers.contains("Invited but did not join"));
+        let s = parse_summary(r#"{"summary":"x","absent":["Andy Reed"]}"#).unwrap();
+        assert_eq!(s.absent, ["Andy Reed"]);
     }
 
     fn hints(t: &Transcript, opts: &Options) -> Hints {

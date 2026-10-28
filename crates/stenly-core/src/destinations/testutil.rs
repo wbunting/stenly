@@ -23,7 +23,7 @@ pub fn meta(title: &str) -> SessionMeta {
         routes: vec![],
         sends: vec![],
         shares: vec![],
-        meeting_app: None,
+        meeting_app: None, attended: None,
     }
 }
 
