@@ -22,6 +22,8 @@ actions!(search_palette, [Dismiss]);
 
 const RECENT: usize = 8;
 const LIMIT: usize = 40;
+const PANEL_RADIUS: f32 = 12.;
+const LIST_PAD: f32 = 6.;
 
 pub fn bind_keys(cx: &mut App) {
     cx.bind_keys([KeyBinding::new("escape", Dismiss, Some("SearchPalette"))]);
@@ -258,7 +260,8 @@ impl Render for SearchPalette {
                     .gap(px(10.))
                     .px(px(10.))
                     .py(px(7.))
-                    .rounded(px(8.))
+                    // Concentric with the panel (12pt corner, 6pt list padding).
+                    .rounded(px(theme::concentric(PANEL_RADIUS, LIST_PAD)))
                     .cursor_pointer()
                     .when(active, |d| d.bg(theme::selected()))
                     .on_mouse_move(cx.listener(move |this, _, _, cx| {
@@ -344,7 +347,7 @@ impl Render for SearchPalette {
             .max_w_full()
             .flex()
             .flex_col()
-            .rounded(px(12.))
+            .rounded(px(PANEL_RADIUS))
             .bg(theme::palette_bg())
             .border_1()
             .border_color(theme::divider())
@@ -370,7 +373,7 @@ impl Render for SearchPalette {
                     .max_h(px(380.))
                     .overflow_y_scroll()
                     .track_scroll(&self.scroll)
-                    .p(px(6.))
+                    .p(px(LIST_PAD))
                     .when_some(status, |d, s| {
                         d.child(
                             div()

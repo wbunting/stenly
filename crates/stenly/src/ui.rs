@@ -177,7 +177,8 @@ fn button_base(id: impl Into<ElementId>, kind: Btn) -> Stateful<Div> {
         .gap(px(5.))
         .h(px(24.))
         .px(px(12.))
-        .rounded(px(6.))
+        // macOS 26 push buttons are capsules, matching the toolbar's Record capsule.
+        .rounded_full()
         .text_size(px(theme::BODY))
         .flex_shrink_0()
         .whitespace_nowrap();
@@ -246,7 +247,7 @@ pub fn popup<T: Copy + PartialEq + 'static>(
         .h(px(24.))
         .pl(px(10.))
         .pr(px(5.))
-        .rounded(px(6.))
+        .rounded_full()
         .bg(theme::button())
         .shadow(bezel_shadow())
         .flex_shrink_0()

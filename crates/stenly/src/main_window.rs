@@ -703,6 +703,13 @@ const SEARCH_BUTTON_SIZE: f32 = 28.;
 const SIDEBAR_W: f32 = 216.;
 /// Gap between the window edge and the floating sidebar panel (macOS 26: 8pt).
 const SIDEBAR_INSET: f32 = 8.;
+/// Rows sit this far inside the glass panel, on every side (incl. the bottom),
+/// so their corners are concentric with the panel's.
+const SIDEBAR_PAD: f32 = 10.;
+/// Window corner with the unified toolbar (macOS 26), and the glass panel's
+/// concentric corner inside it.
+const TOOLBAR_WINDOW_RADIUS: f32 = 26.;
+const SIDEBAR_PANEL_RADIUS: f32 = TOOLBAR_WINDOW_RADIUS - SIDEBAR_INSET;
 /// Fallback window corner radius (macOS 26, titled window without an
 /// NSToolbar, which is what GPUI creates). The real value is read at runtime.
 const WINDOW_RADIUS: f32 = 16.;
@@ -750,7 +757,7 @@ fn nav_item(id: &'static str, label: &'static str, data: crate::icons::Sym, acti
         .gap(px(6.))
         .h(px(28.))
         .px(px(8.))
-        .rounded(px(8.))
+        .rounded(px(theme::concentric(SIDEBAR_PANEL_RADIUS, SIDEBAR_PAD)))
         .text_size(px(theme::BODY))
         .text_color(theme::text())
         .when(active, |d| d.bg(theme::sidebar_selection()))
@@ -1614,10 +1621,11 @@ impl MainWindow {
             .flex_col()
             .gap(px(2.))
             // Rows sit 10pt inside the panel (panel itself is 8pt from the edge).
-            .px(px(if glass { SIDEBAR_INSET + 10. } else { 10. }))
+            .px(px(if glass { SIDEBAR_INSET + SIDEBAR_PAD } else { SIDEBAR_PAD }))
             // Below the traffic lights (titlebar band is 52pt).
             .pt(px(60.))
-            .pb(px(12.))
+            // Same gap to the panel's bottom edge as to its sides (concentric Trash row).
+            .pb(px(if glass { SIDEBAR_INSET + SIDEBAR_PAD } else { SIDEBAR_PAD }))
             .child(item("nav-home", "Meetings", icons::WAVE, Page::Home, cx))
             .child(item("nav-history", "Dictations", icons::QUOTE, Page::History, cx))
             .child(section("Settings"))
@@ -2882,7 +2890,7 @@ impl Render for MainWindow {
                     .absolute()
                     .top(px(SEARCH_BUTTON_TOP))
                     // Same right edge as the selection highlight in the sidebar.
-                    .left(px(SIDEBAR_W - if glass_enabled() { SIDEBAR_INSET + 10. } else { 10. } - SEARCH_BUTTON_SIZE))
+                    .left(px(SIDEBAR_W - if glass_enabled() { SIDEBAR_INSET + SIDEBAR_PAD } else { SIDEBAR_PAD } - SEARCH_BUTTON_SIZE))
                     .child(
                         div()
                             .id("titlebar-search")
@@ -2892,7 +2900,9 @@ impl Render for MainWindow {
                             .flex()
                             .items_center()
                             .justify_center()
-                            .rounded(px(7.))
+                            // Circular, like the traffic lights beside it; also ~concentric
+                            // with the panel corner it sits 3pt below.
+                            .rounded_full()
                             .when(self.search.is_some(), |d| d.bg(theme::selected()))
                             .hover(|d| d.bg(theme::hover()))
                             .active(|d| d.bg(theme::selected()))
