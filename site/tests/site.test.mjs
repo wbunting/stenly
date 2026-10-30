@@ -267,7 +267,7 @@ test('the live pricing page links the Polar checkout',async()=>{
 
 test('home page says free trial then $10, and site free_meetings matches the app',async()=>{
  const page=await browser.newPage();await page.goto(origin);
- assert.match(await page.locator('#download-details').innerText(),new RegExp(`Free trial, then \\${PRICE}`));
+ assert.match(await page.locator('#get-stenly').innerText(),new RegExp(`Free trial, then \\${PRICE}`));
  await page.close();
  const rust=await readFile(join('..','crates','stenly-core','src','license.rs'),'utf8');
  assert.equal(Number(rust.match(/pub const FREE_MEETINGS: u32 = (\d+);/)[1]),FREE_MEETINGS,'FREE_MEETINGS in license.rs must equal free_meetings in site/config.toml');
