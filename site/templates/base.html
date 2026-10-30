@@ -24,7 +24,7 @@
       <a class="wordmark inline-flex items-center gap-2" href="/" aria-label="Stenly home"><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M8 18v4m6-11v18m6-24v30m6-22v14m6-9v4"/></svg><span>stenly</span><span class="wordmark-period">.</span></a>
       <nav class="flex items-center gap-7" aria-label="Main navigation">
         <a class="nav-link{% block pricing_current %}{% endblock pricing_current %}" href="/pricing/">Pricing</a>
-        <span class="source-link">Public source pending</span>
+        <a class="source-link" href="{{ config.extra.repository_url }}">Source on GitHub</a>
         <a class="nav-link" href="/#get-stenly">Availability</a>
       </nav>
     </header>

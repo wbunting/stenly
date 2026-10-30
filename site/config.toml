@@ -9,8 +9,13 @@ minify_html = true
 repository_url = "https://github.com/wbunting/stenly"
 # Stable GitHub release asset names published by the tag workflow.
 macos_download_url = "https://github.com/wbunting/stenly/releases/latest/download/stenly-macos.dmg"
+# Release notes for the build served by macos_download_url.
+release_notes_url = "https://github.com/wbunting/stenly/releases/latest"
+# Minimum macOS for the bundle (LSMinimumSystemVersion in scripts/bundle-macos.sh).
+macos_min_version = "14.2"
+# NOT linked from any page: no Linux asset is published yet, so this URL would 404.
 linux_download_url = "https://github.com/wbunting/stenly/releases/latest/download/stenly-linux.tar.gz"
-# Per-distro setup pages rendered in the Linux download picker.
+# Per-distro pre-release setup guides linked from the home page.
 linux_install_options = [
   { name = "Ubuntu / Debian", url = "/install/ubuntu/" },
   { name = "Fedora", url = "/install/fedora/" },
