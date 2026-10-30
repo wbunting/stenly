@@ -32,6 +32,7 @@ pub enum Page {
     Destinations,
     Context,
     Permissions,
+    License,
     Templates,
     Recipes,
     Trash,
@@ -77,6 +78,8 @@ pub struct MainWindow {
     api_endpoint: Entity<TextInput>,
     api_model: Entity<TextInput>,
     api_key: Entity<TextInput>,
+    /// Settings → Licence: the key being entered.
+    pub(crate) license_key: Entity<TextInput>,
     cli_model: Entity<TextInput>,
     cli_path: Entity<TextInput>,
     jargon: Entity<TextInput>,
@@ -236,6 +239,7 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                         "destinations" => Some(Page::Destinations),
                         "context" => Some(Page::Context),
                         "permissions" => Some(Page::Permissions),
+                        "license" | "licence" => Some(Page::License),
                         "templates" => Some(Page::Templates),
                         "recipes" => Some(Page::Recipes),
                         "trash" => Some(Page::Trash),
@@ -397,6 +401,29 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                         let k = api_key.clone();
                         subs.push(cx.on_blur(&fh, window, move |_, _, cx| save2(&k, cx)));
                     }
+                    let license_key = cx.new(|cx| TextInput::new(cx, "Paste your licence key"));
+                    {
+                        let ctrl = controller.clone();
+                        let ctrl_obs = controller.clone();
+                        subs.push(cx.subscribe(&license_key, move |_, input, ev: &InputEvent, cx| {
+                            if matches!(ev, InputEvent::Submit) {
+                                let key = input.read(cx).text().trim().to_string();
+                                if !key.is_empty() {
+                                    ctrl.update(cx, |c, cx| c.activate_license(key, cx));
+                                }
+                            }
+                        }));
+                        // The field empties once the key is accepted.
+                        let input = license_key.clone();
+                        let mut was_licensed = ctrl_obs.read(cx).license.license.is_some();
+                        subs.push(cx.observe(&ctrl_obs, move |_, ctrl, cx| {
+                            let now = ctrl.read(cx).license.license.is_some();
+                            if now && !was_licensed {
+                                input.update(cx, |t, cx| t.set_text("", cx));
+                            }
+                            was_licensed = now;
+                        }));
+                    }
                     {
                         let ctrl = controller.clone();
                         subs.push(cx.subscribe(&jargon, move |_, input, ev: &InputEvent, cx| {
@@ -531,6 +558,7 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                         api_endpoint,
                         api_model,
                         api_key,
+                        license_key,
                         cli_model,
                         cli_path,
                         jargon,
@@ -1591,6 +1619,7 @@ impl MainWindow {
             Page::Destinations => "Destinations",
             Page::Context => "Context",
             Page::Permissions => "Privacy",
+            Page::License => "Licence",
             Page::Templates => "Templates",
             Page::Recipes => "Recipes",
             Page::Trash => "Trash",
@@ -1679,6 +1708,7 @@ impl MainWindow {
             .child(item("nav-context", "Context", icons::USERS, Page::Context, cx))
             .child(item("nav-dest", "Destinations", icons::PAPERPLANE, Page::Destinations, cx))
             .child(item("nav-perms", "Privacy", icons::SHIELD, Page::Permissions, cx))
+            .child(item("nav-license", "Licence", icons::LOCK, Page::License, cx))
             // Trash sits at the foot of the sidebar, out of the way (Granola, Finder).
             .child(div().flex_1())
             .child(item("nav-trash", "Trash", icons::TRASH, Page::Trash, cx))
@@ -2997,6 +3027,7 @@ impl Render for MainWindow {
             Page::Destinations => self.dest_ui.clone().into_any_element(),
             Page::Context => self.context_ui.clone().into_any_element(),
             Page::Permissions => self.permissions(cx),
+            Page::License => self.license_page(cx),
             Page::Templates => self.library_page(stenly_core::library::Kind::Template, cx),
             Page::Recipes => self.library_page(stenly_core::library::Kind::Recipe, cx),
             Page::Trash => self.trash_page(cx),

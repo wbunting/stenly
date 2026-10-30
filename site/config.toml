@@ -21,9 +21,15 @@ linux_install_options = [
   { name = "Fedora", url = "/install/fedora/" },
   { name = "Arch Linux", url = "/install/arch/" },
 ]
-# Pricing shown on /pricing/.
+# Pricing shown on / and /pricing/ (decided in Linear DEV-23): the source is MIT and
+# free to build; the signed, notarized macOS app is a one-time licence for one Mac,
+# updates included, after a free trial. free_meetings must equal FREE_MEETINGS in
+# crates/stenly-core/src/license.rs (a site test checks it).
 license_price = "$10"
 free_meetings = 10
+# Hosted checkout page the Buy button opens (a public URL, not a secret). Leave empty
+# to hide the Buy link. Polar checkout link "stenly.ai Buy" for product "Stenly for Mac".
+checkout_url = "https://buy.polar.sh/polar_cl_AW5WIhHP8358jeLjFn5luZWRAra4akTRm4syT4Ec1W8"
 # Team contact destination; dead placeholder until a contact flow exists.
 team_contact_url = "mailto:hello@stenly.ai?subject=Stenly%20for%20teams"
 # Optional external hosted service. No sign-in is advertised until this is set.

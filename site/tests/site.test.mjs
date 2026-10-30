@@ -12,8 +12,12 @@ const REPO = 'https://github.com/wbunting/stenly';
 const MAC_DMG = `${REPO}/releases/latest/download/stenly-macos.dmg`;
 const LINUX_TARBALL = 'stenly-linux.tar.gz';
 const RELEASE_NOTES = `${REPO}/releases/latest`;
-// Pricing, licence and trial terms are undecided (Linear DEV-23): no page may claim them.
-const PRICE_OR_LICENCE_CLAIM = /\$\s?\d|€\s?\d|£\s?\d|\b(MIT|Apache|GPL|AGPL|BSD)\b|licen[cs]e|free forever|free trial|\btrial\b|money-back|lifetime|one-time (purchase|payment|fee|price)|subscription/i;
+// Pricing is decided (Linear DEV-23): the source is MIT and free to build; the signed,
+// notarized macOS app is $10 one-time for one Mac, updates included, after a free trial.
+// Anything beyond that stays unclaimed.
+const PRICE = '$10';
+const FREE_MEETINGS = 10;
+const UNDECIDED_CLAIM = /€\s?\d|£\s?\d|\$\s?(?!10\b)\d|free forever|money-back|refund|lifetime|subscription|per month|\/month|\bpro\b|unlimited|team plan/i;
 const zola = process.env.ZOLA_BIN || 'zola';
 let browser, server;
 before(async () => {
@@ -160,7 +164,7 @@ test('Pages build keeps assets same-origin and canonical URLs production',async(
   assert.match(pricing,/href=https:\/\/stenly\.ai\/pricing\/ rel=canonical/);
   assert.ok(pricing.includes(`href=${MAC_DMG}`),'pricing must link the macOS DMG');
   assert.ok(pricing.includes(`href=${REPO}`),'pricing must link the repository');
-  assert.doesNotMatch(pricing,/not available yet|Desktop release pending/);
+  assert.doesNotMatch(pricing,/not available yet|Desktop release pending|Pricing to be announced/);
   assert.match(pricing,/content=https:\/\/stenly\.ai\/pricing\/ property=og:url/);
   for (const slug of ['linux','ubuntu','fedora','arch']) {
    const install=await readFile(join(output,'install',slug,'index.html'),'utf8');
@@ -219,9 +223,12 @@ for (const [width,height] of [[1440,900],[1024,768],[390,844],[320,640]]) {
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   const text=await page.locator('main').innerText();
   assert.doesNotMatch(text,/not available yet|Desktop release pending/);
-  assert.match(text,/Pricing to be announced/);
+  assert.doesNotMatch(text,/Pricing to be announced|Pending/);
+  assert.match(text,/Build it yourself: free \(MIT\)/);
+  assert.match(text,new RegExp(`Ready to run: \\${PRICE} one-time, one Mac, updates included, ${FREE_MEETINGS} free meetings`));
+  assert.match(text,/Linux: free, coming soon/);
   assert.match(text,/Encrypted sharing is available/);
-  assert.doesNotMatch(text,/One machine|Lifetime updates|10 meetings/);
+  assert.doesNotMatch(text,/Lifetime updates/i);
   assert.doesNotMatch(text,/most picked|best value|200k|rating|money-back/i);
   assert.equal(await page.getByRole('link',{name:/View source on GitHub/}).getAttribute('href'),REPO);
   assert.equal(await page.getByRole('link',{name:/Download for macOS/}).getAttribute('href'),MAC_DMG);
@@ -231,6 +238,42 @@ for (const [width,height] of [[1440,900],[1024,768],[390,844],[320,640]]) {
   await page.close();
  });
 }
+test('Buy link follows checkout_url and is hidden while it is unset',async()=>{
+ const temp=await mkdtemp(join(tmpdir(),'stenly-buy-'));
+ try {
+  const build=async(extra)=>{
+   const out=join(temp,extra?'with':'without');
+   const cfg=await readFile('config.toml','utf8');
+   const cfgPath=join(temp,extra?'with.toml':'without.toml');
+   await writeFile(cfgPath,cfg.replace(/^checkout_url = ".*"$/m,`checkout_url = "${extra}"`));
+   const r=spawnSync(zola,['--config',cfgPath,'build','--output-dir',out],{encoding:'utf8'});
+   assert.equal(r.status,0,r.stdout+r.stderr);
+   return readFile(join(out,'pricing','index.html'),'utf8');
+  };
+  const without=await build('');
+  assert.doesNotMatch(without,/buy-licence|Buy a licence/,'no checkout configured: no Buy link');
+  const url='https://example.invalid/checkout/stenly';
+  const withUrl=await build(url);
+  assert.match(withUrl,/Buy a licence/);
+  assert.ok(withUrl.includes(`href=${url}`));
+ } finally { await rm(temp,{recursive:true,force:true}); }
+});
+
+test('the live pricing page links the Polar checkout',async()=>{
+ const page=await browser.newPage();await page.goto(`${origin}/pricing/`);
+ assert.match(await page.locator('#buy-licence').getAttribute('href'),/^https:\/\/buy\.polar\.sh\//);
+ await page.close();
+});
+
+test('home page says free trial then $10, and site free_meetings matches the app',async()=>{
+ const page=await browser.newPage();await page.goto(origin);
+ assert.match(await page.locator('#get-stenly').innerText(),new RegExp(`Free trial, then \\${PRICE}`));
+ await page.close();
+ const rust=await readFile(join('..','crates','stenly-core','src','license.rs'),'utf8');
+ assert.equal(Number(rust.match(/pub const FREE_MEETINGS: u32 = (\d+);/)[1]),FREE_MEETINGS,'FREE_MEETINGS in license.rs must equal free_meetings in site/config.toml');
+ assert.match(await readFile('config.toml','utf8'),new RegExp(`free_meetings = ${FREE_MEETINGS}\\b`));
+});
+
 test('pricing navigation from homepage',async()=>{
  const page=await browser.newPage();await page.goto(origin);
  await page.getByRole('link',{name:'Pricing',exact:true}).click();
@@ -238,7 +281,7 @@ test('pricing navigation from homepage',async()=>{
  await page.close();
 });
 
-test('Linux tarball URL is never linked and no price or licence claim appears on any page',async()=>{
+test('Linux tarball URL is never linked and no undecided price claim appears on any page',async()=>{
  const temp=await mkdtemp(join(tmpdir(),'stenly-claims-'));
  try {
   const output=join(temp,'output');
@@ -252,8 +295,10 @@ test('Linux tarball URL is never linked and no price or licence claim appears on
    assert.ok(hrefs.every(href=>!/stenly-linux|\/releases\/download\//.test(href)),`${file} links a Linux/versioned asset`);
    assert.ok(!hrefs.some(href=>/\/releases\/latest\/download\//.test(href)&&href!==MAC_DMG),`${file} links an unexpected release asset`);
    const visible=html.replace(/<(script|style)[\s\S]*?<\/\1>/g,' ').replace(/<[^>]+>/g,' ');
-   const claim=visible.match(PRICE_OR_LICENCE_CLAIM);
-   assert.equal(claim,null,`${file} makes a price or licence claim: ${claim?.[0]}`);
+   const claim=visible.match(UNDECIDED_CLAIM);
+   assert.equal(claim,null,`${file} makes an undecided price claim: ${claim?.[0]}`);
+   if (file==='pricing/index.html') assert.match(visible,/\$10/);
+   else assert.ok(!/\$10/.test(visible)||file==='index.html',`${file} should not mention the price`);
   }
   const sitemap=await readFile(join(output,'sitemap.xml'),'utf8');
   assert.doesNotMatch(sitemap,/stenly-linux/);

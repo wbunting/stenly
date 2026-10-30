@@ -58,6 +58,14 @@ jobs:
         run: scripts/bundle-macos.sh
         env:
           STENLY_UNIVERSAL: "1"
+          # The official signed app enforces the free trial and $10 licence.
+          # Source builds never do. The checkout URL and licence-provider IDs
+          # are public repository variables, not secrets.
+          # Gate only once the Polar product exists (both variables set);
+          # until then releases ship ungated rather than un-unlockable.
+          STENLY_ENFORCE_LICENSE: ${{ vars.STENLY_POLAR_ORG_ID != '' && vars.STENLY_CHECKOUT_URL != '' && '1' || '0' }}
+          STENLY_CHECKOUT_URL: ${{ vars.STENLY_CHECKOUT_URL }}
+          STENLY_POLAR_ORG_ID: ${{ vars.STENLY_POLAR_ORG_ID }}
           # CI must never silently fall back to the script's contributor-safe
           # ad-hoc development mode.
           STENLY_REQUIRE_DEVELOPER_ID: "1"

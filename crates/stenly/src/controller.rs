@@ -33,6 +33,21 @@ pub struct Download {
     pub status: String,
 }
 
+/// The result of the last licence action, shown under the status in Settings → Licence.
+#[derive(Clone, Debug, PartialEq)]
+pub enum LicenseNotice {
+    Ok(String),
+    Failed(String),
+    /// New recordings are blocked; shown after Record was refused.
+    Blocked(String),
+}
+
+enum LicenseAction {
+    Activate(String),
+    Deactivate,
+    Check,
+}
+
 #[derive(Clone, Debug, Default)]
 pub enum KodyState {
     #[default]
@@ -58,6 +73,9 @@ pub enum ControllerEvent {
     NoteReady(PathBuf),
     /// Close any open "record?" / "stop?" popups.
     DismissPopups,
+    /// A new recording was refused because the free trial is used up (or the
+    /// licence lapsed). Opens Settings → Licence.
+    LicenseBlocked,
 }
 
 pub struct Controller {
@@ -75,6 +93,14 @@ pub struct Controller {
     /// Invalidation only: full-library views must not inherit the Recent cap.
     pub library_revision: u64,
     pub last_error: Option<String>,
+    /// Free trial / licence state, cached: reading it shells out to the Keychain.
+    pub license: stenly_core::license::Snapshot,
+    /// Outcome of the last activate / deactivate / check in Settings → Licence.
+    pub license_notice: Option<LicenseNotice>,
+    /// An activate / deactivate / check is in flight.
+    pub license_busy: bool,
+    /// The record-time notice has been shown for an automatic start already.
+    license_auto_notified: bool,
     pub update_status: String,
     pub update_download: Option<String>,
     pub levels: Option<Arc<stenly_core::session::Levels>>,
@@ -263,6 +289,10 @@ impl Controller {
             recent: vec![],
             library_revision: 0,
             last_error: None,
+            license: stenly_core::license::LicenseManager::system().snapshot(Utc::now()),
+            license_notice: None,
+            license_busy: false,
+            license_auto_notified: false,
             update_status: String::new(),
             update_download: None,
             levels: None,
@@ -733,7 +763,7 @@ impl Controller {
             tracing::info!(action = ?a, "scheduler action");
             match a {
                 Action::ShowPrompt(p) => cx.emit(ControllerEvent::Prompt(p)),
-                Action::AutoStart(ev) => self.start_recording(Some(ev), cx),
+                Action::AutoStart(ev) => self.start_recording_inner(Some(ev), true, cx),
                 Action::SuggestStop { reason } => cx.emit(ControllerEvent::SuggestStop(reason)),
                 Action::AutoStop { reason } => {
                     tracing::info!(%reason, "stopping recording automatically");
@@ -801,7 +831,30 @@ impl Controller {
     }
 
     pub fn start_recording(&mut self, event: Option<CalendarEvent>, cx: &mut Context<Self>) {
+        self.start_recording_inner(event, false, cx)
+    }
+
+    /// Refuse a new recording: the trial is used up and there is no valid
+    /// licence. Existing meetings, search, sharing and dictation are untouched.
+    fn block_recording(&mut self, automatic: bool, cx: &mut Context<Self>) {
+        let Some(msg) = self.license.blocked_message() else { return };
+        tracing::info!("new recording blocked: free trial finished");
+        self.license_notice = Some(LicenseNotice::Blocked(msg));
+        // A calendar auto-start has nobody at the keyboard; say it once per
+        // launch rather than pulling the window forward every meeting.
+        if !automatic || !self.license_auto_notified {
+            self.license_auto_notified = true;
+            cx.emit(ControllerEvent::LicenseBlocked);
+        }
+        cx.notify();
+    }
+
+    fn start_recording_inner(&mut self, event: Option<CalendarEvent>, automatic: bool, cx: &mut Context<Self>) {
         if self.recording.is_some() {
+            return;
+        }
+        if !self.license.can_record() {
+            self.block_recording(automatic, cx);
             return;
         }
         let Some(activity) = stenly_core::update::Activity::begin() else {
@@ -894,7 +947,11 @@ impl Controller {
                     if let Some(w) = watch {
                         w.stop();
                     }
-                    let (dir, _) = rec.stop()?;
+                    let (dir, meta) = rec.stop()?;
+                    // Count it against the free trial (no-op once licensed or in a source build).
+                    let secs = meta.ended.map(|e| (e - meta.started).num_seconds()).unwrap_or(0);
+                    let id = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+                    stenly_core::license::LicenseManager::system().record_meeting(&id, secs);
                     // Writers are joined, so the live worker has all the audio:
                     // let it decode the last phrase.
                     if let Some(live) = live
@@ -911,6 +968,7 @@ impl Controller {
             let _ = this.update(cx, |c, cx| {
                 c.finishing = None;
                 c.jobs.clear();
+                c.refresh_license(cx);
                 match r {
                     Ok(dir) => {
                         c.processing_queue.push(dir);
@@ -924,6 +982,81 @@ impl Controller {
         })
         .detach();
         cx.notify();
+    }
+
+    // ---- licence (Settings → Licence)
+    /// Re-read the trial count and stored licence (after a meeting, or an action).
+    pub fn refresh_license(&mut self, cx: &mut Context<Self>) {
+        // The Keychain read shells out: keep it off the main thread.
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
+            let snap = cx.background_spawn(async { stenly_core::license::LicenseManager::system().snapshot(Utc::now()) }).await;
+            let _ = this.update(cx, |c, cx| {
+                c.license = snap;
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    /// Weekly licence check, quiet. Called at launch and every few hours.
+    pub fn check_license(&mut self, cx: &mut Context<Self>) {
+        if !self.license.enforced || self.license.license.is_none() || self.license_busy {
+            return;
+        }
+        self.run_license_action(LicenseAction::Check, cx);
+    }
+
+    pub fn activate_license(&mut self, key: String, cx: &mut Context<Self>) {
+        self.run_license_action(LicenseAction::Activate(key), cx);
+    }
+
+    pub fn deactivate_license(&mut self, cx: &mut Context<Self>) {
+        self.run_license_action(LicenseAction::Deactivate, cx);
+    }
+
+    fn run_license_action(&mut self, action: LicenseAction, cx: &mut Context<Self>) {
+        if self.license_busy {
+            return;
+        }
+        let quiet = matches!(action, LicenseAction::Check);
+        self.license_busy = true;
+        if !quiet {
+            self.license_notice = None;
+        }
+        cx.notify();
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
+            let (result, snap) = cx
+                .background_spawn(async move {
+                    use stenly_core::license::{LicenseError, LicenseManager, Refresh};
+                    let m = LicenseManager::system();
+                    let now = Utc::now();
+                    let Some(p) = stenly_core::license::default_provider() else {
+                        return (Err(LicenseError::Rejected("Licensing isn't set up in this build.".into())), m.snapshot(now));
+                    };
+                    let r = match action {
+                        LicenseAction::Activate(key) => m.activate(&*p, &key, now).map(|_| "Licence activated. Thank you!".to_string()),
+                        LicenseAction::Deactivate => m.deactivate(&*p, now).map(|_| "Licence removed from this Mac. You can activate it on another Mac.".to_string()),
+                        LicenseAction::Check => match m.refresh(&*p, now, false) {
+                            Refresh::Revoked => Ok("Your licence is no longer valid.".to_string()),
+                            _ => Ok(String::new()),
+                        },
+                    };
+                    (r, m.snapshot(Utc::now()))
+                })
+                .await;
+            let _ = this.update(cx, |c, cx| {
+                c.license_busy = false;
+                c.license = snap;
+                match result {
+                    Ok(msg) if !msg.is_empty() => c.license_notice = Some(LicenseNotice::Ok(msg)),
+                    Ok(_) => {}
+                    Err(e) if quiet => tracing::info!(error = %e, "licence check failed"),
+                    Err(e) => c.license_notice = Some(LicenseNotice::Failed(e.to_string())),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
     }
 
     /// Whether a meeting can be trashed: not mid-recording or mid-processing.

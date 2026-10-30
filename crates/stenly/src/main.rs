@@ -11,6 +11,7 @@ mod dictation_hud;
 mod dictation_pages;
 mod icons;
 mod library_pages;
+mod license_page;
 mod live_pill;
 mod main_window;
 mod meeting_view;
@@ -159,6 +160,14 @@ fn main() {
                     }
                 },
                 ControllerEvent::DismissPopups => cx.defer(popup::close_all),
+                // Record was refused: show Settings → Licence, which says why and
+                // how to continue. Deferred so no window opens inside the event.
+                ControllerEvent::LicenseBlocked => {
+                    let ctrl = ctrl.clone();
+                    cx.defer(move |cx| {
+                        main_window::open(ctrl, Some(main_window::Page::License), cx);
+                    });
+                }
             })
             .detach();
         }
