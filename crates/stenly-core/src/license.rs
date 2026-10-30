@@ -35,7 +35,8 @@ const COUNTED_CAP: usize = 200;
 /// `STENLY_FORCE_LICENSE_GATE=1` turns it on at run time in any build, for
 /// testing and screenshots with an isolated profile.
 pub fn enforced() -> bool {
-    cfg!(stenly_enforce_license) || std::env::var("STENLY_FORCE_LICENSE_GATE").is_ok_and(|v| v == "1")
+    cfg!(stenly_enforce_license)
+        || std::env::var("STENLY_FORCE_LICENSE_GATE").is_ok_and(|v| v == "1")
 }
 
 /// Where "Buy" opens: the hosted checkout page, set when the official build is
@@ -47,8 +48,10 @@ pub fn checkout_url() -> Option<&'static str> {
 /// The licence service this build talks to, if one is configured. `None` in
 /// source builds, so they never make a licence request.
 pub fn default_provider() -> Option<Box<dyn Provider + Send + Sync>> {
-    None
+    polar::Polar::from_build().map(|p| Box::new(p) as Box<dyn Provider + Send + Sync>)
 }
+
+pub mod polar;
 
 // ---------------------------------------------------------------- provider
 
@@ -75,7 +78,9 @@ pub enum LicenseError {
     #[error("{0}")]
     Rejected(String),
     /// Every activation of the key is in use on other Macs.
-    #[error("This key is already active on its maximum number of Macs. Deactivate one in Stenly's Licence settings, then try again.")]
+    #[error(
+        "This key is already active on its maximum number of Macs. Deactivate one in Stenly's Licence settings, then try again."
+    )]
     LimitReached,
     /// No definite answer (offline, timeout, server error). Never revokes anything.
     #[error("Couldn't reach the licence server: {0}")]
@@ -134,7 +139,10 @@ impl TrialState {
         }
         let count = a.count.max(b.count).max(counted.len() as u32);
         let skip = counted.len().saturating_sub(COUNTED_CAP);
-        TrialState { count, counted: counted.split_off(skip) }
+        TrialState {
+            count,
+            counted: counted.split_off(skip),
+        }
     }
 }
 
@@ -203,7 +211,11 @@ impl Snapshot {
         match self.state() {
             State::Open => "Not required in this build".into(),
             State::Licensed => "Licensed".into(),
-            State::Trial => format!("Free trial · {} of {} meetings left", self.left(), self.free_meetings),
+            State::Trial => format!(
+                "Free trial · {} of {} meetings left",
+                self.left(),
+                self.free_meetings
+            ),
             State::Expired => "Free trial finished".into(),
         }
     }
@@ -245,16 +257,38 @@ const TRIAL_ITEM: &str = "trial";
 impl LicenseManager {
     /// The app's real storage: Keychain plus `trial.json` in the data dir.
     pub fn system() -> Self {
-        Self { vault: Box::new(KeychainVault), trial_file: crate::config::data_dir().join("trial.json"), enforced: enforced(), free_meetings: FREE_MEETINGS }
+        Self {
+            vault: Box::new(KeychainVault),
+            trial_file: crate::config::data_dir().join("trial.json"),
+            enforced: enforced(),
+            free_meetings: FREE_MEETINGS,
+        }
     }
 
-    pub fn new(vault: Box<dyn Vault + Send + Sync>, trial_file: PathBuf, enforced: bool, free_meetings: u32) -> Self {
-        Self { vault, trial_file, enforced, free_meetings }
+    pub fn new(
+        vault: Box<dyn Vault + Send + Sync>,
+        trial_file: PathBuf,
+        enforced: bool,
+        free_meetings: u32,
+    ) -> Self {
+        Self {
+            vault,
+            trial_file,
+            enforced,
+            free_meetings,
+        }
     }
 
     fn read_trial(&self) -> TrialState {
-        let file = std::fs::read_to_string(&self.trial_file).ok().and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
-        let kept = self.vault.get(TRIAL_ITEM).and_then(|s| serde_json::from_str(&s).ok()).unwrap_or_default();
+        let file = std::fs::read_to_string(&self.trial_file)
+            .ok()
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+        let kept = self
+            .vault
+            .get(TRIAL_ITEM)
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
         TrialState::merge(file, kept)
     }
 
@@ -309,15 +343,34 @@ impl LicenseManager {
                 if age > Duration::days(GRACE_DAYS) {
                     (None, Some(Lapse::NeedsValidation))
                 } else {
-                    (Some(LicenseInfo { masked_key: mask(&l.key), activated_at: l.activated_at, last_validated: l.last_validated, grace_days_left: left }), None)
+                    (
+                        Some(LicenseInfo {
+                            masked_key: mask(&l.key),
+                            activated_at: l.activated_at,
+                            last_validated: l.last_validated,
+                            grace_days_left: left,
+                        }),
+                        None,
+                    )
                 }
             }
         };
-        Snapshot { enforced: self.enforced, free_meetings: self.free_meetings, used, license, lapse }
+        Snapshot {
+            enforced: self.enforced,
+            free_meetings: self.free_meetings,
+            used,
+            license,
+            lapse,
+        }
     }
 
     /// Activate `key` on this Mac and keep the licence.
-    pub fn activate(&self, provider: &dyn Provider, key: &str, now: DateTime<Utc>) -> Result<Snapshot, LicenseError> {
+    pub fn activate(
+        &self,
+        provider: &dyn Provider,
+        key: &str,
+        now: DateTime<Utc>,
+    ) -> Result<Snapshot, LicenseError> {
         let key = key.trim();
         if key.is_empty() {
             return Err(LicenseError::Rejected("Enter your licence key.".into()));
@@ -328,16 +381,28 @@ impl LicenseManager {
             && !l.revoked
             && provider.validate(&l.key, &l.activation_id).is_ok()
         {
-            let renewed = StoredLicense { last_validated: now, ..l };
-            self.write_license(&renewed).map_err(|e| LicenseError::Offline(format!("{e:#}")))?;
+            let renewed = StoredLicense {
+                last_validated: now,
+                ..l
+            };
+            self.write_license(&renewed)
+                .map_err(|e| LicenseError::Offline(format!("{e:#}")))?;
             return Ok(self.snapshot(now));
         }
         let a = provider.activate(key, &machine_label())?;
-        let l = StoredLicense { key: key.to_string(), activation_id: a.activation_id, activated_at: now, last_validated: now, revoked: false };
+        let l = StoredLicense {
+            key: key.to_string(),
+            activation_id: a.activation_id,
+            activated_at: now,
+            last_validated: now,
+            revoked: false,
+        };
         if let Err(e) = self.write_license(&l) {
             // Don't strand a used slot we can't remember.
             let _ = provider.deactivate(&l.key, &l.activation_id);
-            return Err(LicenseError::Offline(format!("couldn't save the licence to the Keychain: {e:#}")));
+            return Err(LicenseError::Offline(format!(
+                "couldn't save the licence to the Keychain: {e:#}"
+            )));
         }
         Ok(self.snapshot(now))
     }
@@ -345,14 +410,20 @@ impl LicenseManager {
     /// Release this Mac's slot and forget the licence. If the server can't be
     /// reached the licence is kept and the error returned, so the slot isn't
     /// silently stranded.
-    pub fn deactivate(&self, provider: &dyn Provider, now: DateTime<Utc>) -> Result<Snapshot, LicenseError> {
+    pub fn deactivate(
+        &self,
+        provider: &dyn Provider,
+        now: DateTime<Utc>,
+    ) -> Result<Snapshot, LicenseError> {
         if let Some(l) = self.read_license() {
             match provider.deactivate(&l.key, &l.activation_id) {
                 // Already gone on the server is fine.
                 Ok(()) | Err(LicenseError::Rejected(_)) => {}
                 Err(e) => return Err(e),
             }
-            self.vault.set(LICENSE_ITEM, "").map_err(|e| LicenseError::Offline(format!("{e:#}")))?;
+            self.vault
+                .set(LICENSE_ITEM, "")
+                .map_err(|e| LicenseError::Offline(format!("{e:#}")))?;
         }
         Ok(self.snapshot(now))
     }
@@ -360,7 +431,9 @@ impl LicenseManager {
     /// Re-check the licence if it hasn't been confirmed for [`REVALIDATE_DAYS`]
     /// (or `force`). Only a definite rejection revokes; network trouble never does.
     pub fn refresh(&self, provider: &dyn Provider, now: DateTime<Utc>, force: bool) -> Refresh {
-        let Some(l) = self.read_license() else { return Refresh::Skipped };
+        let Some(l) = self.read_license() else {
+            return Refresh::Skipped;
+        };
         if l.revoked {
             return Refresh::Skipped;
         }
@@ -369,7 +442,10 @@ impl LicenseManager {
         }
         match provider.validate(&l.key, &l.activation_id) {
             Ok(()) => {
-                let _ = self.write_license(&StoredLicense { last_validated: now, ..l });
+                let _ = self.write_license(&StoredLicense {
+                    last_validated: now,
+                    ..l
+                });
                 Refresh::Validated
             }
             Err(LicenseError::Rejected(_)) => {
@@ -382,7 +458,14 @@ impl LicenseManager {
 }
 
 fn mask(key: &str) -> String {
-    let tail: String = key.chars().rev().take(4).collect::<Vec<_>>().into_iter().rev().collect();
+    let tail: String = key
+        .chars()
+        .rev()
+        .take(4)
+        .collect::<Vec<_>>()
+        .into_iter()
+        .rev()
+        .collect();
     format!("••••{tail}")
 }
 
@@ -390,8 +473,36 @@ fn mask(key: &str) -> String {
 fn machine_label() -> String {
     let mut b = [0u8; 3];
     let _ = getrandom::fill(&mut b);
-    format!("Stenly {} on macOS ({:02x}{:02x}{:02x})", env!("CARGO_PKG_VERSION"), b[0], b[1], b[2])
+    format!(
+        "Stenly {} on macOS ({:02x}{:02x}{:02x})",
+        env!("CARGO_PKG_VERSION"),
+        b[0],
+        b[1],
+        b[2]
+    )
 }
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+pub(crate) mod tests_support {
+    use std::collections::HashMap;
+    use std::sync::Mutex;
+    #[derive(Default)]
+    pub struct MemVault(pub Mutex<HashMap<String, String>>);
+    impl super::Vault for MemVault {
+        fn get(&self, name: &str) -> Option<String> {
+            self.0
+                .lock()
+                .unwrap()
+                .get(name)
+                .cloned()
+                .filter(|s| !s.is_empty())
+        }
+        fn set(&self, name: &str, value: &str) -> anyhow::Result<()> {
+            self.0.lock().unwrap().insert(name.into(), value.into());
+            Ok(())
+        }
+    }
+}

@@ -1,18 +1,6 @@
+use super::tests_support::MemVault;
 use super::*;
-use std::collections::HashMap;
 use std::sync::Mutex;
-
-#[derive(Default)]
-struct MemVault(Mutex<HashMap<String, String>>);
-impl Vault for MemVault {
-    fn get(&self, name: &str) -> Option<String> {
-        self.0.lock().unwrap().get(name).cloned().filter(|s| !s.is_empty())
-    }
-    fn set(&self, name: &str, value: &str) -> Result<()> {
-        self.0.lock().unwrap().insert(name.into(), value.into());
-        Ok(())
-    }
-}
 
 /// Shares the vault so a test can wipe/inspect it while the manager owns a box.
 struct SharedVault(std::sync::Arc<MemVault>);
@@ -41,7 +29,11 @@ struct MockState {
 }
 impl Mock {
     fn new(limit: usize) -> Self {
-        Mock { keys: vec!["STENLY-AAAA-1111"], limit, state: Mutex::default() }
+        Mock {
+            keys: vec!["STENLY-AAAA-1111"],
+            limit,
+            state: Mutex::default(),
+        }
     }
     fn set_offline(&self, v: bool) {
         self.state.lock().unwrap().offline = v;
@@ -80,7 +72,8 @@ impl Provider for Mock {
         if s.offline {
             return Err(LicenseError::Offline("down".into()));
         }
-        if s.revoked.iter().any(|r| r == key) || !s.active.iter().any(|(k, a)| k == key && a == id) {
+        if s.revoked.iter().any(|r| r == key) || !s.active.iter().any(|(k, a)| k == key && a == id)
+        {
             return Err(LicenseError::Rejected("revoked".into()));
         }
         Ok(())
@@ -102,7 +95,15 @@ fn t0() -> DateTime<Utc> {
 
 fn manager(dir: &std::path::Path, enforced: bool) -> (LicenseManager, std::sync::Arc<MemVault>) {
     let vault = std::sync::Arc::new(MemVault::default());
-    (LicenseManager::new(Box::new(SharedVault(vault.clone())), dir.join("trial.json"), enforced, 10), vault)
+    (
+        LicenseManager::new(
+            Box::new(SharedVault(vault.clone())),
+            dir.join("trial.json"),
+            enforced,
+            10,
+        ),
+        vault,
+    )
 }
 
 const KEY: &str = "STENLY-AAAA-1111";
@@ -115,8 +116,16 @@ fn trial_counts_each_meeting_once_and_ignores_accidental_starts() {
     let (m, _) = manager(dir.path(), true);
     assert_eq!(m.snapshot(t0()).left(), 10);
     assert_eq!(m.record_meeting("a", 600), 1);
-    assert_eq!(m.record_meeting("a", 600), 1, "reprocessing the same meeting doesn't count twice");
-    assert_eq!(m.record_meeting("b", 5), 1, "a 5 second accidental start isn't a meeting");
+    assert_eq!(
+        m.record_meeting("a", 600),
+        1,
+        "reprocessing the same meeting doesn't count twice"
+    );
+    assert_eq!(
+        m.record_meeting("b", 5),
+        1,
+        "a 5 second accidental start isn't a meeting"
+    );
     assert_eq!(m.record_meeting("c", 61), 2);
     let s = m.snapshot(t0());
     assert_eq!((s.used, s.left(), s.state()), (2, 8, State::Trial));
@@ -130,7 +139,10 @@ fn recording_is_blocked_only_after_the_last_free_meeting() {
     for i in 0..9 {
         m.record_meeting(&format!("s{i}"), 300);
     }
-    assert!(m.snapshot(t0()).can_record(), "the 10th meeting is still free");
+    assert!(
+        m.snapshot(t0()).can_record(),
+        "the 10th meeting is still free"
+    );
     m.record_meeting("s9", 300);
     let s = m.snapshot(t0());
     assert_eq!(s.state(), State::Expired);
@@ -222,13 +234,25 @@ fn one_mac_limit_then_deactivate_and_move_to_another_mac() {
     let (mac_b, _) = manager(dir_b.path(), true);
     let p = Mock::new(1);
     mac_a.activate(&p, KEY, t0()).unwrap();
-    assert_eq!(mac_b.activate(&p, KEY, t0()).unwrap_err(), LicenseError::LimitReached);
-    assert!(mac_b.activate(&p, KEY, t0()).unwrap_err().to_string().contains("Deactivate"));
+    assert_eq!(
+        mac_b.activate(&p, KEY, t0()).unwrap_err(),
+        LicenseError::LimitReached
+    );
+    assert!(
+        mac_b
+            .activate(&p, KEY, t0())
+            .unwrap_err()
+            .to_string()
+            .contains("Deactivate")
+    );
     // free the slot on the old Mac
     let s = mac_a.deactivate(&p, t0()).unwrap();
     assert!(s.license.is_none());
     assert_eq!(p.active(), 0);
-    assert_eq!(mac_b.activate(&p, KEY, t0()).unwrap().state(), State::Licensed);
+    assert_eq!(
+        mac_b.activate(&p, KEY, t0()).unwrap().state(),
+        State::Licensed
+    );
 }
 
 #[test]
@@ -252,7 +276,13 @@ fn entering_the_same_key_again_does_not_use_a_second_slot() {
     m.activate(&p, KEY, t0() + Duration::days(3)).unwrap();
     assert_eq!(p.active(), 1);
     assert_eq!(p.calls().iter().filter(|c| *c == "activate").count(), 1);
-    assert_eq!(m.snapshot(t0() + Duration::days(3)).license.unwrap().last_validated, t0() + Duration::days(3));
+    assert_eq!(
+        m.snapshot(t0() + Duration::days(3))
+            .license
+            .unwrap()
+            .last_validated,
+        t0() + Duration::days(3)
+    );
 }
 
 #[test]
@@ -261,7 +291,10 @@ fn activating_while_offline_fails_cleanly_and_keeps_the_trial() {
     let (m, _) = manager(dir.path(), true);
     let p = Mock::new(1);
     p.set_offline(true);
-    assert!(matches!(m.activate(&p, KEY, t0()).unwrap_err(), LicenseError::Offline(_)));
+    assert!(matches!(
+        m.activate(&p, KEY, t0()).unwrap_err(),
+        LicenseError::Offline(_)
+    ));
     assert_eq!(m.snapshot(t0()).state(), State::Trial);
 }
 
@@ -272,7 +305,10 @@ fn deactivating_offline_keeps_the_licence_instead_of_stranding_the_slot() {
     let p = Mock::new(1);
     m.activate(&p, KEY, t0()).unwrap();
     p.set_offline(true);
-    assert!(matches!(m.deactivate(&p, t0()).unwrap_err(), LicenseError::Offline(_)));
+    assert!(matches!(
+        m.deactivate(&p, t0()).unwrap_err(),
+        LicenseError::Offline(_)
+    ));
     assert_eq!(m.snapshot(t0()).state(), State::Licensed);
     p.set_offline(false);
     m.deactivate(&p, t0()).unwrap();
@@ -287,10 +323,26 @@ fn validation_runs_weekly_not_on_every_launch() {
     let (m, _) = manager(dir.path(), true);
     let p = Mock::new(1);
     m.activate(&p, KEY, t0()).unwrap();
-    assert_eq!(m.refresh(&p, t0() + Duration::days(6), false), Refresh::Skipped);
-    assert_eq!(m.refresh(&p, t0() + Duration::days(7), false), Refresh::Validated);
-    assert_eq!(m.snapshot(t0() + Duration::days(8)).license.unwrap().last_validated, t0() + Duration::days(7));
-    assert_eq!(m.refresh(&p, t0() + Duration::days(8), true), Refresh::Validated, "force always checks");
+    assert_eq!(
+        m.refresh(&p, t0() + Duration::days(6), false),
+        Refresh::Skipped
+    );
+    assert_eq!(
+        m.refresh(&p, t0() + Duration::days(7), false),
+        Refresh::Validated
+    );
+    assert_eq!(
+        m.snapshot(t0() + Duration::days(8))
+            .license
+            .unwrap()
+            .last_validated,
+        t0() + Duration::days(7)
+    );
+    assert_eq!(
+        m.refresh(&p, t0() + Duration::days(8), true),
+        Refresh::Validated,
+        "force always checks"
+    );
 }
 
 #[test]
@@ -300,18 +352,37 @@ fn offline_licence_keeps_working_for_30_days_then_asks_for_one_check() {
     let p = Mock::new(1);
     m.activate(&p, KEY, t0()).unwrap();
     p.set_offline(true);
-    assert_eq!(m.refresh(&p, t0() + Duration::days(10), false), Refresh::Offline);
+    assert_eq!(
+        m.refresh(&p, t0() + Duration::days(10), false),
+        Refresh::Offline
+    );
     let day30 = m.snapshot(t0() + Duration::days(30));
-    assert!(day30.can_record(), "day 30 is still inside the grace period");
+    assert!(
+        day30.can_record(),
+        "day 30 is still inside the grace period"
+    );
     assert_eq!(day30.license.unwrap().grace_days_left, 0);
     let day31 = m.snapshot(t0() + Duration::days(31));
-    assert_eq!(day31.state(), State::Trial, "falls back to the remaining free meetings");
+    assert_eq!(
+        day31.state(),
+        State::Trial,
+        "falls back to the remaining free meetings"
+    );
     assert_eq!(day31.lapse, Some(Lapse::NeedsValidation));
-    assert!(day31.blocked_message().is_none(), "while the trial isn't used up nothing is blocked");
+    assert!(
+        day31.blocked_message().is_none(),
+        "while the trial isn't used up nothing is blocked"
+    );
     // back online: one successful check restores it
     p.set_offline(false);
-    assert_eq!(m.refresh(&p, t0() + Duration::days(31), true), Refresh::Validated);
-    assert_eq!(m.snapshot(t0() + Duration::days(31)).state(), State::Licensed);
+    assert_eq!(
+        m.refresh(&p, t0() + Duration::days(31), true),
+        Refresh::Validated
+    );
+    assert_eq!(
+        m.snapshot(t0() + Duration::days(31)).state(),
+        State::Licensed
+    );
 }
 
 #[test]
@@ -349,17 +420,26 @@ fn a_definite_rejection_revokes_but_network_errors_never_do() {
     }
     m.activate(&p, KEY, t0()).unwrap();
     p.set_offline(true);
-    assert_eq!(m.refresh(&p, t0() + Duration::days(8), false), Refresh::Offline);
+    assert_eq!(
+        m.refresh(&p, t0() + Duration::days(8), false),
+        Refresh::Offline
+    );
     assert!(m.snapshot(t0() + Duration::days(8)).can_record());
     p.set_offline(false);
     p.revoke(KEY);
-    assert_eq!(m.refresh(&p, t0() + Duration::days(9), false), Refresh::Revoked);
+    assert_eq!(
+        m.refresh(&p, t0() + Duration::days(9), false),
+        Refresh::Revoked
+    );
     let s = m.snapshot(t0() + Duration::days(9));
     assert!(!s.can_record());
     assert_eq!(s.lapse, Some(Lapse::Revoked));
     assert!(s.blocked_message().unwrap().contains("no longer valid"));
     // revoked licences aren't re-checked forever
-    assert_eq!(m.refresh(&p, t0() + Duration::days(30), false), Refresh::Skipped);
+    assert_eq!(
+        m.refresh(&p, t0() + Duration::days(30), false),
+        Refresh::Skipped
+    );
 }
 
 #[test]
@@ -385,6 +465,8 @@ fn counted_ids_are_capped() {
         m.record_meeting(&format!("s{i}"), 300);
     }
     assert_eq!(m.snapshot(t0()).used as usize, COUNTED_CAP + 20);
-    let t: TrialState = serde_json::from_str(&std::fs::read_to_string(dir.path().join("trial.json")).unwrap()).unwrap();
+    let t: TrialState =
+        serde_json::from_str(&std::fs::read_to_string(dir.path().join("trial.json")).unwrap())
+            .unwrap();
     assert_eq!(t.counted.len(), COUNTED_CAP);
 }

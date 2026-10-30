@@ -245,7 +245,7 @@ test('Buy link follows checkout_url and is hidden while it is unset',async()=>{
    const out=join(temp,extra?'with':'without');
    const cfg=await readFile('config.toml','utf8');
    const cfgPath=join(temp,extra?'with.toml':'without.toml');
-   await writeFile(cfgPath,extra?cfg.replace('checkout_url = ""',`checkout_url = "${extra}"`):cfg);
+   await writeFile(cfgPath,cfg.replace(/^checkout_url = ".*"$/m,`checkout_url = "${extra}"`));
    const r=spawnSync(zola,['--config',cfgPath,'build','--output-dir',out],{encoding:'utf8'});
    assert.equal(r.status,0,r.stdout+r.stderr);
    return readFile(join(out,'pricing','index.html'),'utf8');
@@ -257,6 +257,12 @@ test('Buy link follows checkout_url and is hidden while it is unset',async()=>{
   assert.match(withUrl,/Buy a licence/);
   assert.ok(withUrl.includes(`href=${url}`));
  } finally { await rm(temp,{recursive:true,force:true}); }
+});
+
+test('the live pricing page links the Polar checkout',async()=>{
+ const page=await browser.newPage();await page.goto(`${origin}/pricing/`);
+ assert.match(await page.locator('#buy-licence').getAttribute('href'),/^https:\/\/buy\.polar\.sh\//);
+ await page.close();
 });
 
 test('home page says free trial then $10, and site free_meetings matches the app',async()=>{

@@ -19,7 +19,8 @@
 # STENLY_ENFORCE_LICENSE=1 builds the free-trial and licence gate into the app.
 # Only the official release workflow sets it, and only a Developer ID build may
 # carry it (source and ad-hoc builds are never gated). STENLY_CHECKOUT_URL is
-# the https checkout page the Buy button opens; it is public, not a secret.
+# the https checkout page the Buy button opens and STENLY_POLAR_ORG_ID the Polar
+# organization the app activates keys against. Both are public, not secrets.
 #
 # STENLY_DIST_DIR selects the output directory. A non-default name or
 # identifier is useful for a local permission-safe test and is refused with
@@ -108,11 +109,15 @@ if [[ "${STENLY_ENFORCE_LICENSE:-0}" == "1" ]]; then
     echo "STENLY_ENFORCE_LICENSE=1 requires STENLY_CHECKOUT_URL=https://… (the Buy page)" >&2
     exit 2
   fi
+  if [[ -z "${STENLY_POLAR_ORG_ID:-}" ]]; then
+    echo "STENLY_ENFORCE_LICENSE=1 requires STENLY_POLAR_ORG_ID (Polar organization ID)" >&2
+    exit 2
+  fi
   echo "Building with the free-trial and licence gate (official build)."
-  export STENLY_ENFORCE_LICENSE=1 STENLY_CHECKOUT_URL
+  export STENLY_ENFORCE_LICENSE=1 STENLY_CHECKOUT_URL STENLY_POLAR_ORG_ID
 else
   # A stray value in the environment must not leak into a source-style bundle.
-  unset STENLY_ENFORCE_LICENSE STENLY_CHECKOUT_URL
+  unset STENLY_ENFORCE_LICENSE STENLY_CHECKOUT_URL STENLY_POLAR_ORG_ID STENLY_POLAR_API
 fi
 
 mkdir -p "$DIST_DIR"
