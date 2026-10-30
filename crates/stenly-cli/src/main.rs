@@ -147,9 +147,29 @@ enum Cmd {
     /// Speaker names: inspect meeting apps, (re)name a session's speakers.
     #[command(subcommand)]
     Speakers(SpeakersCmd),
+    /// Free trial and licence for the official signed app (source builds never need one).
+    #[command(subcommand)]
+    License(LicenseCmd),
     /// Meeting context: background on a meeting from past meetings, the vault, Notion and MCP servers.
     #[command(subcommand)]
     Context(ContextCmd),
+}
+
+#[derive(Subcommand)]
+enum LicenseCmd {
+    /// Show the trial or licence state.
+    Status {
+        /// Re-check the licence with the server now.
+        #[arg(long)]
+        check: bool,
+    },
+    /// Activate a licence key on this Mac (uses one activation).
+    Activate {
+        /// The key from your purchase email. Omit to read it from STENLY_LICENSE_KEY or stdin.
+        key: Option<String>,
+    },
+    /// Release this Mac's activation so the key can be used on another Mac.
+    Deactivate,
 }
 
 #[derive(Subcommand)]
@@ -225,6 +245,10 @@ fn main() -> Result<()> {
 
     match cli.cmd {
         Cmd::Record { title, secs, no_process, live } => {
+            let lic = stenly_core::license::LicenseManager::system();
+            if let Some(msg) = lic.snapshot(chrono::Utc::now()).blocked_message() {
+                anyhow::bail!("{msg}");
+            }
             let (ltx, lrx) = crossbeam_channel::unbounded();
             let rec = Recording::start_with_live(platform.audio.as_ref(), &paths.audio_dir, &title, None, live.then_some(ltx))?;
             let live = if live { Some(stenly_asr::LiveSession::start_from(&cfg.asr, &paths.models_dir, &rec.dir, lrx)?) } else { None };
@@ -249,7 +273,9 @@ fn main() -> Result<()> {
                 );
             }
             eprintln!();
-            let (dir, _) = rec.stop()?;
+            let (dir, meta) = rec.stop()?;
+            let id = dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+            lic.record_meeting(&id, meta.ended.map(|e| (e - meta.started).num_seconds()).unwrap_or(0));
             if let Some(l) = live {
                 let t0 = std::time::Instant::now();
                 let segs = l.finish()?;
@@ -507,6 +533,7 @@ fn main() -> Result<()> {
             stenly_core::chatgpt::sign_out()?;
             eprintln!("signed out of ChatGPT");
         }
+        Cmd::License(cmd) => license_cmd(cmd)?,
         Cmd::ChatgptStatus => {
             let acct = stenly_core::chatgpt::signed_in().context("not signed in; run `stenly-cli chatgpt-login`")?;
             let mut llm = cfg.llm.clone();
@@ -916,6 +943,63 @@ fn speakers_cmd(cfg: &Config, platform: &stenly_platform::Platform, c: SpeakersC
                 }
             }
             s.save()?;
+        }
+    }
+    Ok(())
+}
+
+fn license_cmd(cmd: LicenseCmd) -> Result<()> {
+    use stenly_core::license::{LicenseManager, State};
+    let m = LicenseManager::system();
+    let now = chrono::Utc::now;
+    let provider = || stenly_core::license::default_provider().context("licensing isn't set up in this build");
+    let show = |m: &LicenseManager| {
+        let s = m.snapshot(now());
+        println!("{}", s.headline());
+        match s.state() {
+            State::Open => println!("This build doesn't enforce a licence (source builds are free)."),
+            State::Licensed => {
+                let l = s.license.as_ref().unwrap();
+                println!("key:           {}", l.masked_key);
+                println!("last checked:  {}", l.last_validated.format("%Y-%m-%d"));
+                println!("works offline: {} more days without a check", l.grace_days_left);
+            }
+            State::Trial | State::Expired => {
+                println!("meetings:      {} of {} free meetings used", s.used.min(s.free_meetings), s.free_meetings);
+                if let Some(msg) = s.blocked_message() {
+                    println!("{msg}");
+                } else if let Some(url) = stenly_core::license::checkout_url() {
+                    println!("buy:           {url}");
+                }
+            }
+        }
+    };
+    match cmd {
+        LicenseCmd::Status { check } => {
+            if check {
+                let r = m.refresh(&*provider()?, now(), true);
+                eprintln!("check: {r:?}");
+            }
+            show(&m);
+        }
+        LicenseCmd::Activate { key } => {
+            let key = match key.or_else(|| std::env::var("STENLY_LICENSE_KEY").ok()) {
+                Some(k) => k,
+                None => {
+                    eprintln!("Licence key: ");
+                    let mut line = String::new();
+                    std::io::stdin().read_line(&mut line)?;
+                    line
+                }
+            };
+            m.activate(&*provider()?, &key, now())?;
+            eprintln!("activated");
+            show(&m);
+        }
+        LicenseCmd::Deactivate => {
+            m.deactivate(&*provider()?, now())?;
+            eprintln!("deactivated; this key can be activated on another Mac");
+            show(&m);
         }
     }
     Ok(())

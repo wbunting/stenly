@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Pricing — Stenly{% endblock title %}
-{% block description %}Build Stenly from source, download the macOS app, or talk to us about self-hosting for your team. Pricing to be announced.{% endblock description %}
+{% block description %}Stenly is free to build yourself (MIT). The signed, notarized macOS app is {{ config.extra.license_price }} one-time for one Mac, updates included, after {{ config.extra.free_meetings }} free meetings.{% endblock description %}
 {% block canonical %}https://stenly.ai/pricing/{% endblock canonical %}
 {% block og_title %}Pricing — Stenly{% endblock og_title %}
 {% block og_url %}https://stenly.ai/pricing/{% endblock og_url %}
@@ -10,21 +10,25 @@
 <main id="main" class="pricing-main">
   <section class="pricing-intro" aria-labelledby="pricing-title">
     <h1 id="pricing-title"><span>Free to build.</span><em>Fair to keep.</em></h1>
-    <p>Choose how much of the work you want to do.</p>
+    <p>Choose how much of the work you want to do. The source is MIT licensed either way.</p>
   </section>
 
   <section class="pricing-grid" aria-label="Pricing options">
     <article class="price-column">
       <div class="price-header"><h2>Build it yourself</h2><p class="price">Free</p></div>
-      <p class="price-summary">For people who are happy to compile, sign, rebuild, and update Stenly on their own.</p>
-      <ul class="price-list"><li>Full source code</li><li>Compile and sign it yourself</li><li>Manage updates yourself</li></ul>
+      <p class="price-summary">Build it yourself: free (MIT). For people who are happy to compile, sign, rebuild, and update Stenly on their own.</p>
+      <ul class="price-list"><li>Full source code, MIT licensed</li><li>No trial, no licence key</li><li>Linux builds stay free</li></ul>
       <a class="price-action secondary-action" href="{{ config.extra.repository_url }}">View source on GitHub <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
     </article>
 
     <article class="price-column price-featured">
-      <div class="price-header"><h2>Ready to run</h2><p class="price">Pending</p></div>
-      <p class="price-summary">A signed, notarized macOS build for Apple Silicon and Intel is available to download. Pricing to be announced.</p>
-      <a class="price-action primary-action" href="{{ config.extra.macos_download_url }}">Download for macOS <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 4v12m-5-5 5 5 5-5M5 20h14"/></svg></a>
+      <div class="price-header"><h2>Ready to run</h2><p class="price">{{ config.extra.license_price }}</p></div>
+      <p class="price-summary">Ready to run: {{ config.extra.license_price }} one-time, one Mac, updates included, {{ config.extra.free_meetings }} free meetings.</p>
+      <ul class="price-list"><li>Signed and notarized for Apple Silicon and Intel</li><li>{{ config.extra.free_meetings }} free meetings, then a licence</li><li>Updates included</li></ul>
+      <div class="price-actions">
+        <a class="price-action primary-action" href="{{ config.extra.macos_download_url }}">Download for macOS <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 4v12m-5-5 5 5 5-5M5 20h14"/></svg></a>
+        {% if config.extra.checkout_url %}<a class="price-action secondary-action" id="buy-licence" href="{{ config.extra.checkout_url }}">Buy a licence — {{ config.extra.license_price }} <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>{% endif %}
+      </div>
     </article>
 
     <article class="price-column">
@@ -36,7 +40,7 @@
   </section>
 
   <section class="pricing-notes" aria-label="Pricing notes">
-    <p>Pricing details will be announced when finalized. Linux downloads are coming soon.</p>
+    <p>Notes, search, sharing, MCP and dictation never need a licence. After the free meetings, only starting a new recording does. Linux: free, coming soon.</p>
   </section>
 </main>
 {% endblock main %}

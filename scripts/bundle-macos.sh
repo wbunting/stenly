@@ -16,6 +16,11 @@
 # (STENLY_REQUIRE_DEVELOPER_ID=1 or STENLY_NOTARY_PROFILE set) refuses to run
 # unless the identity is set and installed in a keychain.
 #
+# STENLY_ENFORCE_LICENSE=1 builds the free-trial and licence gate into the app.
+# Only the official release workflow sets it, and only a Developer ID build may
+# carry it (source and ad-hoc builds are never gated). STENLY_CHECKOUT_URL is
+# the https checkout page the Buy button opens; it is public, not a secret.
+#
 # STENLY_DIST_DIR selects the output directory. A non-default name or
 # identifier is useful for a local permission-safe test and is refused with
 # --install, so the daily-use /Applications/Stenly.app is never replaced by it.
@@ -92,6 +97,23 @@ sign_nested_code() {
     find "$APP/Contents" -type f \( -name '*.dylib' -o \( -perm -u+x ! -name 'stenly' ! -name 'stenly-cli' ! -name '*.dylib' \) \) -print0
   )
 }
+
+# The licence gate belongs to the official signed build only.
+if [[ "${STENLY_ENFORCE_LICENSE:-0}" == "1" ]]; then
+  if [[ "$DEVELOPER_ID_AVAILABLE" != true ]]; then
+    echo "STENLY_ENFORCE_LICENSE=1 requires a Developer ID build (set STENLY_SIGN_IDENTITY)" >&2
+    exit 2
+  fi
+  if [[ "${STENLY_CHECKOUT_URL:-}" != https://* ]]; then
+    echo "STENLY_ENFORCE_LICENSE=1 requires STENLY_CHECKOUT_URL=https://… (the Buy page)" >&2
+    exit 2
+  fi
+  echo "Building with the free-trial and licence gate (official build)."
+  export STENLY_ENFORCE_LICENSE=1 STENLY_CHECKOUT_URL
+else
+  # A stray value in the environment must not leak into a source-style bundle.
+  unset STENLY_ENFORCE_LICENSE STENLY_CHECKOUT_URL
+fi
 
 mkdir -p "$DIST_DIR"
 rm -rf "$APP" "$DMG"

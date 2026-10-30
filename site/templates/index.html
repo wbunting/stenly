@@ -38,7 +38,7 @@
           <h2>A local memory<br>for the work that follows.</h2>
           <p>Record meetings and dictate in one native Rust app. Notes go to the Obsidian vault you choose. <a class="inline-link" href="/pricing/">See pricing</a></p>
           <a class="download-button" id="download-macos" href="{{ config.extra.macos_download_url }}"><span data-os-icon hidden></span><span>Download for macOS</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 4v12m-5-5 5 5 5-5M5 20h14"/></svg></a>
-          <p class="availability" id="download-details">macOS {{ config.extra.macos_min_version }} or later · Apple Silicon and Intel · <a class="inline-link" href="{{ config.extra.release_notes_url }}">Release notes</a></p>
+          <p class="availability" id="download-details">macOS {{ config.extra.macos_min_version }} or later · Apple Silicon and Intel · Free trial, then {{ config.extra.license_price }} · <a class="inline-link" href="{{ config.extra.release_notes_url }}">Release notes</a></p>
           <p class="availability linux-status" id="linux-status"><strong>Linux: coming soon.</strong> Pre-release guides: {% for option in config.extra.linux_install_options %}<a class="inline-link" href="{{ option.url }}">{{ option.name }}</a>{% if not loop.last %} · {% endif %}{% endfor %}</p>
           {% if config.extra.hosted_url %}<a class="hosted-link" href="{{ config.extra.hosted_url }}">Prefer us to host it? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>{% endif %}
         </div>

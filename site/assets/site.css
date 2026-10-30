@@ -188,6 +188,8 @@ h1 { margin: 0; text-align: center; font-weight: 400; }
 .price-list li::before { content: ""; position: absolute; left: 1px; top: 15px; width: 7px; height: 7px; border: 1px solid #899449; background: #eff3d2; }
 .price-action { margin-top: auto; display: inline-flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 48px; padding: 14px 16px; border-radius: 7px; font-size: 13px; font-weight: 550; transition: background 160ms, color 160ms; }
 .price-action svg { width: 17px; height: 17px; }
+.price-actions { margin-top: auto; display: flex; flex-direction: column; gap: 10px; }
+.price-actions .price-action { margin-top: 0; }
 .primary-action { background: var(--ink); color: var(--paper); }
 .primary-action:hover { background: var(--lime); color: var(--ink); }
 .secondary-action { border: 1px solid var(--ink); }

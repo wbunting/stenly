@@ -68,6 +68,34 @@ pub fn set_chatgpt_tokens(json: &str) -> anyhow::Result<()> {
     if json.trim().is_empty() { delete(CHATGPT_SERVICE, &account) } else { set(CHATGPT_SERVICE, &account, json.trim(), "Stenly ChatGPT sign-in") }
 }
 
+/// Licence and trial state (see `license`). One item per profile and name
+/// (`license`, `trial`), so an isolated profile never touches the licence of
+/// the user's everyday app. The trial counter lives here too so a config reset
+/// doesn't hand out a fresh trial.
+const LICENSE_SERVICE: &str = "ai.stenly.license";
+
+fn license_account(name: &str) -> String {
+    let profile = match std::env::var("STENLY_CONFIG") {
+        Ok(p) if !p.trim().is_empty() => {
+            use sha2::Digest;
+            let h = sha2::Sha256::digest(crate::config::config_path().to_string_lossy().as_bytes());
+            format!("profile-{}", h.iter().take(6).map(|b| format!("{b:02x}")).collect::<String>())
+        }
+        _ => "default".to_string(),
+    };
+    format!("{name}.{profile}")
+}
+
+pub fn license_item(name: &str) -> Option<String> {
+    get(LICENSE_SERVICE, &license_account(name))
+}
+
+/// Store (or with "" remove) a licence item.
+pub fn set_license_item(name: &str, value: &str) -> anyhow::Result<()> {
+    let account = license_account(name);
+    if value.trim().is_empty() { delete(LICENSE_SERVICE, &account) } else { set(LICENSE_SERVICE, &account, value.trim(), "Stenly licence") }
+}
+
 fn valid_account(a: &str) -> bool {
     !a.is_empty() && a.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }

@@ -45,6 +45,14 @@ cargo run -p stenly --release --features pipewire,wayland,x11
 
 The first run creates a configuration file and lets you select where notes and recordings live. See [the CLI guide](docs/cli.md) for headless workflows and [the architecture guide](docs/architecture.md) for the crate layout.
 
+## Pricing: free to build, $10 for the signed app
+
+Stenly's source is MIT and free to build yourself. **A source build has no trial, no licence key and no limits.**
+
+The signed, notarized macOS app from the official release is **$10 one-time, for one Mac, updates included**, after **10 free meetings**. Only that official build enforces it, and only by pausing *new meeting recordings* once the free meetings are used up. Existing notes, search, sharing, MCP and dictation always keep working. Settings → Licence shows the status, opens checkout, activates a key and deactivates this Mac (so you can move the licence). `stenly-cli license status|activate|deactivate` does the same from a terminal.
+
+The licence is re-checked about weekly and keeps working offline for 30 days. The gate is compiled in only when `scripts/bundle-macos.sh` runs with `STENLY_ENFORCE_LICENSE=1` and a Developer ID identity (the release workflow does this); plain `cargo build` and ad-hoc bundles never enforce anything. For testing the gate with an isolated profile (`STENLY_CONFIG`, `STENLY_DATA_DIR`), set `STENLY_FORCE_LICENSE_GATE=1`.
+
 ## Bring meetings into your agent
 
 Install the MCP server from a source checkout (or use the copy included in the app bundle):

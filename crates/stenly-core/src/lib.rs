@@ -18,6 +18,7 @@ pub mod ics;
 pub mod identity;
 pub mod kody;
 pub mod library;
+pub mod license;
 pub mod oauth;
 pub mod obsidian;
 pub mod ollama;
