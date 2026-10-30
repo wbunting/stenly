@@ -6222,7 +6222,7 @@ checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "stenly"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6251,7 +6251,7 @@ dependencies = [
 
 [[package]]
 name = "stenly-agent"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6266,7 +6266,7 @@ dependencies = [
 
 [[package]]
 name = "stenly-asr"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "crossbeam-channel",
@@ -6280,7 +6280,7 @@ dependencies = [
 
 [[package]]
 name = "stenly-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6298,7 +6298,7 @@ dependencies = [
 
 [[package]]
 name = "stenly-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -6325,7 +6325,7 @@ dependencies = [
 
 [[package]]
 name = "stenly-mcp"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "chrono",
@@ -6341,7 +6341,7 @@ dependencies = [
 
 [[package]]
 name = "stenly-platform"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "block2 0.6.2",
