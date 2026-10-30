@@ -162,8 +162,11 @@ sign_nested_code
 # has no signing entitlement: the user grants it in Privacy & Security. Network access is
 # unrestricted for a non-sandboxed Developer ID app, so no entitlement is
 # appropriate or required.
-sign_entitled_executable "$APP/Contents/MacOS/stenly"
+# Sign stenly-cli before the main executable: signing the bundle's main
+# executable validates its sibling code, and lipo output for universal builds
+# carries no linker signature until this point.
 sign_entitled_executable "$APP/Contents/MacOS/stenly-cli"
+sign_entitled_executable "$APP/Contents/MacOS/stenly"
 codesign --force "${SIGN_ARGS[@]}" --entitlements "$ENTITLEMENTS" "$APP"
 codesign --verify --deep --strict --verbose=2 "$APP"
 if [[ "$UNIVERSAL" == "1" ]]; then
