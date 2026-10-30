@@ -51,10 +51,10 @@ A successful local deployment does not prove the Actions credential has been con
 Edit `config.toml`:
 
 - `extra.macos_download_url`: real macOS release asset URL.
-- `extra.linux_download_url`: Linux release asset or installation landing-page URL.
+- `extra.linux_download_url`: future Linux release asset URL; not linked while the asset does not exist.
 - `extra.linux_install_options`: optional array of `{ name, url }` distro instruction links. By default it points to the built-in Ubuntu / Debian, Fedora, and Arch pages.
 
-OS-aware actions: macOS shows the Apple icon and **Download**, linking directly to the Mac asset. Linux shows the penguin and **Get it**, opening the platform/install chooser. Other devices and disabled JavaScript retain the Mac/Linux chooser. Mobile platforms, iPad desktop mode, and ChromeOS are not mistaken for supported desktop OSes. Mac visitors can still use **Other platforms**. Icons are self-hosted Simple Icons (CC0; see `static/icons/LICENSE.md`).
+Home page downloads: the **Download for macOS** button links straight to `extra.macos_download_url` (it works without JavaScript; JS only adds the Apple icon on Macs). Linux has no release asset yet, so the home page shows **Linux: coming soon** with links to the pre-release setup guides, and `extra.linux_download_url` is deliberately not linked anywhere (tests enforce this). When a Linux asset ships, link it and update the tests. `extra.release_notes_url` and `extra.macos_min_version` feed the macOS details line. Icons are self-hosted Simple Icons (CC0; see `static/icons/LICENSE.md`).
 - `extra.license_price`, `extra.free_meetings`, and `extra.team_contact_url`: values used by `/pricing/`. Defaults are $10, 10 free meetings, and a team mailto placeholder.
 - `extra.hosted_url`: optional external hosted-service URL.
 - `extra.repository_url`: source repository and setup instructions.
@@ -78,4 +78,4 @@ npm exec playwright install chromium
 npm test
 ```
 
-Tests start their own server on port 1112. They cover desktop fit, mobile overflow, example switching, download disclosure, keyboard dismissal, no-JavaScript access, and missing asset requests. Evidence stays in ignored directories, not Git.
+Tests start their own server on port 1112. They cover desktop fit, mobile overflow, example switching, the macOS download link, the Linux coming-soon note, no-JavaScript access, no Linux tarball links, no price or licence claims, and missing asset requests. Evidence stays in ignored directories, not Git.
