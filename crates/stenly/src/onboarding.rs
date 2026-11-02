@@ -291,6 +291,68 @@ impl Onboarding {
         let ctrl = self.controller.clone();
         let input = self.kody_url.clone();
         let connected = matches!(kody, KodyState::Connected);
+        let google = c.google.clone();
+        let google_available = c.google_available();
+        let google_connected = !google.accounts.is_empty();
+        let google_block: Option<AnyElement> = (google_available || google_connected).then(|| {
+            let mut rows: Vec<AnyElement> = google.accounts.iter().enumerate().map(|(i, email)| {
+                let expired = google.needs_signin.contains(email);
+                let (c_out, c_in) = (ctrl.clone(), ctrl.clone());
+                let out_email = email.clone();
+                ui::row(
+                    Some(icons::CHECK_CIRCLE),
+                    email.clone(),
+                    Some(if expired { "Sign-in expired. Sign in again." } else { "Google Calendar connected" }.into()),
+                    div().flex().items_center().gap(px(6.))
+                        .when(expired && google_available, |d| d.child(ui::button(("ob-google-again", i), "Sign In Again", Btn::Accent).on_click(move |_, _, cx| c_in.update(cx, |c, cx| c.sign_in_google(cx)))))
+                        .child(ui::button(("ob-google-out", i), "Sign Out", Btn::Ghost).on_click(move |_, _, cx| {
+                            let e = out_email.clone();
+                            c_out.update(cx, |c, cx| c.sign_out_google(&e, cx))
+                        })),
+                ).into_any_element()
+            }).collect();
+            if google_available {
+                let c_in = ctrl.clone();
+                let c_cancel = ctrl.clone();
+                rows.push(ui::row(
+                    Some(icons::CALENDAR),
+                    if google_connected { "Add another Google account" } else { "Sign in with Google" },
+                    Some(if google_connected { "Work and personal accounts can be watched together." } else { "Read-only. Stenly sees your events, guests and call links, and never changes your calendar." }.into()),
+                    if google.signing_in {
+                        div().flex().items_center().gap(px(8.))
+                            .child(ui::pending("ob-google-wait", "Waiting for browser…"))
+                            .child(ui::button("ob-google-cancel", "Cancel", Btn::Ghost).on_click(move |_, _, cx| c_cancel.update(cx, |c, cx| c.cancel_google_sign_in(cx))))
+                            .into_any_element()
+                    } else {
+                        ui::button("ob-google", if google_connected { "Add Account" } else { "Sign in with Google" }, if google_connected { Btn::Ghost } else { Btn::Primary })
+                            .on_click(move |_, _, cx| c_in.update(cx, |c, cx| c.sign_in_google(cx)))
+                            .into_any_element()
+                    },
+                ).into_any_element());
+            }
+            let gids = &c.config.calendar.google_calendar_ids;
+            let cal_rows: Vec<AnyElement> = google.calendars.iter().enumerate().map(|(i, cal)| {
+                let on = gids.contains(&cal.id) || (gids.is_empty() && cal.primary);
+                let key = cal.id.clone();
+                let ctrl = ctrl.clone();
+                div().flex().items_center().gap(px(10.)).h(px(36.))
+                    .child(div().size(px(10.)).flex_shrink_0().rounded_full().bg(cal.color.as_deref().map(theme::hex).unwrap_or(theme::muted())))
+                    .child(div().flex_1().min_w_0().flex().items_baseline().gap(px(6.))
+                        .child(div().text_size(px(theme::BODY)).truncate().child(cal.name.clone()))
+                        .when(google.accounts.len() > 1 && cal.account.as_deref() != Some(cal.name.as_str()), |d| d.child(div().text_size(px(theme::SUBHEAD)).text_color(theme::faint()).truncate().child(cal.account.clone().unwrap_or_default()))))
+                    .child(ui::toggle(("ob-gcal", i), on, move |_, _, cx| {
+                        let k = key.clone();
+                        ctrl.update(cx, |c, cx| c.toggle_google_calendar(&k, cx))
+                    })).into_any_element()
+            }).collect();
+            let list_err = google.status.clone().and_then(|s| s.err()).filter(|_| google.calendars.is_empty() && google.needs_signin.is_empty());
+            div().flex().flex_col().gap(px(10.))
+                .child(ui::card(rows))
+                .when_some(google.error.clone(), |d, e| d.child(div().px(px(2.)).text_size(px(theme::SUBHEAD)).text_color(theme::red()).child(e)))
+                .when_some(list_err, |d, e| d.child(div().px(px(2.)).text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child(e)))
+                .when(!cal_rows.is_empty(), |d| d.child(ui::caption("Which Google calendars should Stenly watch?")).child(div().id("google-cals").max_h(px(150.)).overflow_y_scroll().child(ui::card(cal_rows))))
+                .into_any_element()
+        });
         let body: AnyElement = if eventkit {
             let rows: Vec<AnyElement> = cals.iter().enumerate().map(|(i, cal)| {
                 let on = ids.contains(&cal.id);
@@ -403,14 +465,22 @@ impl Onboarding {
                 .child(div().px(px(2.)).text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child("You can also add a private ICS link later in Calendar settings."))
                 .into_any_element()
         };
+        // With Google available, the Kody form (an advanced option) steps aside
+        // for anyone who has not connected it.
+        let body = if google_block.is_some() && !eventkit && !connected { div().into_any_element() } else { body };
+        let google_first = google_block.is_some();
         div()
             .flex_1()
             .flex()
             .flex_col()
-            .child(Self::header("Connect Your Calendar", if eventkit { "Stenly reads the calendars already on this Mac and pops up a minute before a meeting with a Zoom, Meet or Teams link." } else { "Add a private or shared ICS calendar link. Stenly will pop up a minute before meetings with a Zoom, Meet or Teams link." }))
+            .gap(px(14.))
+            .child(Self::header("Connect Your Calendar", if google_first {
+                "Sign in with Google, or use the calendars already on this Mac. Stenly pops up a minute before a meeting with a Zoom, Meet or Teams link."
+            } else if eventkit { "Stenly reads the calendars already on this Mac and pops up a minute before a meeting with a Zoom, Meet or Teams link." } else { "Add a private or shared ICS calendar link. Stenly will pop up a minute before meetings with a Zoom, Meet or Teams link." }))
+            .when_some(google_block, |d, g| d.child(g))
             .child(body)
             .child(div().flex_1())
-            .child(self.footer("Continue", true, if eventkit || connected { None } else { Some("Skip") }, cx))
+            .child(self.footer("Continue", true, if eventkit || connected || google_connected { None } else { Some("Skip") }, cx))
             .into_any_element()
     }
 

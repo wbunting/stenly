@@ -12,6 +12,19 @@ fn main() {
             println!("cargo:rustc-env={var}={v}");
         }
     }
+    // The Google OAuth client for "Sign in with Google" (a Desktop-app client).
+    // Its secret isn't confidential, but it is kept out of the repository:
+    // supply both at build time (the release workflow reads them from
+    // repository variables/secrets). Without an id the sign-in buttons are
+    // hidden and nothing else changes.
+    for var in ["STENLY_GOOGLE_CLIENT_ID", "STENLY_GOOGLE_CLIENT_SECRET"] {
+        println!("cargo:rerun-if-env-changed={var}");
+        if let Ok(v) = std::env::var(var)
+            && !v.trim().is_empty()
+        {
+            println!("cargo:rustc-env={var}={}", v.trim());
+        }
+    }
     println!("cargo:rustc-check-cfg=cfg(stenly_enforce_license)");
     if std::env::var("STENLY_ENFORCE_LICENSE").as_deref() == Ok("1") {
         // A gate with no way to buy or activate would lock users out.

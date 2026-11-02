@@ -708,6 +708,36 @@ pub fn open_destinations(cx: &mut App) {
     }
 }
 
+/// One calendar in a list: colour dot, name, a one-line problem, on/off switch.
+fn calendar_toggle_row(id: SharedString, cal: &stenly_core::calendar::CalendarInfo, on: bool, problem: Option<&'static str>, on_toggle: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static) -> AnyElement {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(10.))
+        .min_h(px(40.))
+        .py(px(8.))
+        .child(div().size(px(10.)).flex_shrink_0().rounded_full().bg(cal.color.as_deref().map(theme::hex).unwrap_or(theme::muted())))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(
+                    div()
+                        .flex()
+                        .items_baseline()
+                        .gap(px(6.))
+                        .child(div().text_size(px(theme::BODY)).truncate().child(cal.name.clone()))
+                        .when(cal.primary, |d| d.child(div().text_size(px(theme::SUBHEAD)).text_color(theme::faint()).child("Primary"))),
+                )
+                .when_some(problem, |d, p| d.child(div().flex().items_center().gap(px(4.)).text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child(icon(icons::ALERT, 10., theme::amber())).child(p))),
+        )
+        .child(ui::toggle(id, on, on_toggle))
+        .into_any_element()
+}
+
 /// Calendar descriptions are often HTML (Google); show them as plain text.
 fn strip_html(s: &str) -> String {
     let s = s.replace("<br>", "\n").replace("<br/>", "\n").replace("<br />", "\n").replace("</p>", "\n");
@@ -1847,7 +1877,7 @@ impl MainWindow {
             );
         }
 
-        let no_calendar = !c.uses_eventkit() && c.config.calendar.kody_url.is_empty() && c.config.calendar.ics_urls.is_empty();
+        let no_calendar = !c.uses_eventkit() && c.config.calendar.kody_url.is_empty() && c.config.calendar.ics_urls.is_empty() && c.google.accounts.is_empty();
         let (empty_title, empty_desc) = if no_calendar {
             ("No calendar connected", "Connect one and Stenly will offer to record a minute before each call.")
         } else if !c.calendar_errors.is_empty() && c.events.is_empty() {
@@ -2074,6 +2104,8 @@ impl MainWindow {
         let cal_status = c.calendars_status.clone();
         let fetched = c.calendar_fetched;
         let errors = c.calendar_errors.clone();
+        let google = c.google.clone();
+        let google_available = c.google_available();
         // One plain-language problem statement instead of raw error chains.
         let kody_err = cal_status.clone().and_then(|s| s.err()).filter(|_| calendars.is_empty());
         let failing = kody_err.is_some() || errors.iter().any(|e| e.starts_with("Google Calendar (via Kody)"));
@@ -2196,6 +2228,102 @@ impl MainWindow {
             })
             .collect();
 
+        // ---- Sign in with Google (native OAuth): accounts, then each account's calendars.
+        let mut google_rows: Vec<AnyElement> = google
+            .accounts
+            .iter()
+            .enumerate()
+            .map(|(i, email)| {
+                let expired = google.needs_signin.iter().any(|a| a == email);
+                let (ctrl_out, ctrl_in) = (self.controller.clone(), self.controller.clone());
+                let out_email = email.clone();
+                let status: SharedString = if expired {
+                    "Sign-in expired. Sign in again to keep syncing.".into()
+                } else {
+                    match fetched {
+                        Some(t) => format!("Synced at {}", t.with_timezone(&Local).format("%-I:%M %p")).into(),
+                        None => "Syncing…".into(),
+                    }
+                };
+                ui::row(
+                    Some(icons::CALENDAR),
+                    email.clone(),
+                    Some(status),
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .when(expired && google_available, |d| d.child(ui::button(("google-again", i), "Sign In Again", Btn::Accent).on_click(move |_, _, cx| ctrl_in.update(cx, |c, cx| c.sign_in_google(cx)))))
+                        .child(ui::more_button(("google-more", i), vec![ui::MenuEntry::item("Sign Out")], move |_, _, cx| {
+                            let e = out_email.clone();
+                            ctrl_out.update(cx, |c, cx| c.sign_out_google(&e, cx))
+                        })),
+                )
+                .into_any_element()
+            })
+            .collect();
+        if google_available {
+            let ctrl = self.controller.clone();
+            let ctrl_cancel = self.controller.clone();
+            let first = google.accounts.is_empty();
+            google_rows.push(
+                ui::row(
+                    Some(icons::CALENDAR),
+                    if first { "Sign in with Google" } else { "Add another Google account" },
+                    Some(if first { "Read-only access to your events, guests and call links. Stenly never changes your calendar.".into() } else { "Work and personal accounts can be watched together.".into() }),
+                    if google.signing_in {
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .child(ui::pending("google-wait", "Waiting for browser…"))
+                            .child(ui::button("google-cancel", "Cancel", Btn::Ghost).on_click(move |_, _, cx| ctrl_cancel.update(cx, |c, cx| c.cancel_google_sign_in(cx))))
+                            .into_any_element()
+                    } else {
+                        ui::button("google-signin", if first { "Sign in with Google" } else { "Add Account" }, if first { Btn::Accent } else { Btn::Ghost })
+                            .on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.sign_in_google(cx)))
+                            .into_any_element()
+                    },
+                )
+                .into_any_element(),
+            );
+        }
+        let google_on = !google_rows.is_empty();
+        let google_cal_sections: Vec<AnyElement> = google
+            .accounts
+            .iter()
+            .filter_map(|email| {
+                let cals: Vec<&stenly_core::calendar::CalendarInfo> = google.calendars.iter().filter(|c| c.account.as_deref().is_some_and(|a| a.eq_ignore_ascii_case(email))).collect();
+                if cals.is_empty() {
+                    return None;
+                }
+                let ids = &cfg.calendar.google_calendar_ids;
+                let rows: Vec<AnyElement> = cals
+                    .iter()
+                    .enumerate()
+                    .map(|(i, cal)| {
+                        let on = ids.contains(&cal.id) || (ids.is_empty() && cal.primary);
+                        let key = cal.id.clone();
+                        let ctrl = self.controller.clone();
+                        let problem = on.then(|| errors.iter().find(|e| e.contains(&format!("“{}”", cal.name))).cloned()).flatten();
+                        calendar_toggle_row(
+                            SharedString::from(format!("gcal-{email}-{i}")),
+                            cal,
+                            on,
+                            problem.map(|p| if p.contains("won't share") { "Events aren't shared with this account" } else { "Couldn't load events" }),
+                            move |_, _, cx| {
+                                let k = key.clone();
+                                ctrl.update(cx, |c, cx| c.toggle_google_calendar(&k, cx))
+                            },
+                        )
+                    })
+                    .collect();
+                Some(div().flex().flex_col().child(ui::caption(email.clone())).child(ui::card(rows)).into_any_element())
+            })
+            .collect();
+        let google_error = google.error.clone();
+        let google_list_error = google.status.clone().and_then(|s| s.err()).filter(|_| google.calendars.is_empty() && google.needs_signin.is_empty());
+
         let ics_rows: Vec<AnyElement> = cfg
             .calendar
             .ics_urls
@@ -2254,6 +2382,10 @@ impl MainWindow {
                 let ctrl = self.controller.clone();
                 ui::row(Some(icons::CALENDAR), "Use the calendars on this Mac", Some("Switch back to the accounts already in Calendar.app.".into()), ui::button("eventkit-use", "Use This Mac", Btn::Ghost).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.set_calendar_source("eventkit", cx)))).into_any_element()
             }])))
+            .when(google_on, |d| d.child(ui::caption("Google Calendar")).child(ui::card(google_rows)))
+            .when_some(google_error, |d, e| d.child(div().px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).text_color(theme::red()).child(e)))
+            .when_some(google_list_error, |d, e| d.child(div().px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child(e)))
+            .children(google_cal_sections)
             .when(!calendars.is_empty(), |d| d.child(ui::caption("Calendars")).child(ui::card(cal_rows)))
             // Non-Kody problems (an ICS feed) still surface, one line each.
             .children(errors.into_iter()
@@ -2261,7 +2393,9 @@ impl MainWindow {
                 // the actionable state, not an alarming failed-sync message.
                 .filter(|e| !(eventkit && calendar_permission == stenly_core::platform::PermissionState::NotDetermined && e.starts_with("Calendars on this Mac:")))
                 .filter(|e| !e.starts_with("Google Calendar (via Kody)"))
-                .filter(|e| !calendars.iter().any(|c| e.contains(&format!("“{}”", c.name))))
+                // Sign-in problems show on the account's own row.
+                .filter(|e| !stenly_core::google::is_reauth(e))
+                .filter(|e| !calendars.iter().chain(google.calendars.iter()).any(|c| e.contains(&format!("“{}”", c.name))))
                 .take(3).map(|e| {
                     div().flex().items_start().gap(px(6.)).px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).line_height(px(15.)).text_color(theme::muted()).child(icon(icons::ALERT, 11., theme::amber())).child(div().flex_1().min_w_0().child(e))
                 }))

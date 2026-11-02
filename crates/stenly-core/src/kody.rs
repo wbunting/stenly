@@ -383,75 +383,9 @@ pub fn fetch_events(
     Ok((out, errors))
 }
 
-fn parse_dt(v: &Value) -> Option<chrono::DateTime<chrono::Utc>> {
-    v["dateTime"].as_str().and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()).map(|d| d.with_timezone(&chrono::Utc))
-}
-
-/// Google Calendar API event JSON → CalendarEvent. All-day / cancelled / OOO events are skipped.
+/// Google Calendar API event JSON → CalendarEvent (shared with the native Google sign-in).
 pub fn map_google_event(e: &Value) -> Option<crate::calendar::CalendarEvent> {
-    use crate::calendar::{Attendee, CalendarEvent};
-    if e["status"].as_str() == Some("cancelled") {
-        return None;
-    }
-    if matches!(e["eventType"].as_str(), Some("outOfOffice" | "focusTime" | "workingLocation" | "birthday")) {
-        return None;
-    }
-    let start = parse_dt(&e["start"])?;
-    let end = parse_dt(&e["end"]).unwrap_or(start + chrono::Duration::minutes(30));
-    let conf: Vec<String> = e["conferenceData"]["entryPoints"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|p| p["entryPointType"].as_str() == Some("video"))
-        .filter_map(|p| p["uri"].as_str().map(str::to_string))
-        .collect();
-    let hangout = e["hangoutLink"].as_str();
-    let location = e["location"].as_str();
-    let description = e["description"].as_str();
-    let link = crate::meeting_url::find_meeting_link(
-        conf.iter().map(String::as_str).chain([hangout, location, description].into_iter().flatten()),
-    );
-    let attendees: Vec<Attendee> = e["attendees"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .filter(|a| a["resource"].as_bool() != Some(true))
-        .map(|a| Attendee {
-            name: a["displayName"].as_str().map(str::to_string),
-            email: a["email"].as_str().unwrap_or_default().to_string(),
-            status: a["responseStatus"].as_str().map(|s| match s {
-                "accepted" => "ACCEPTED",
-                "declined" => "DECLINED",
-                "tentative" => "TENTATIVE",
-                _ => "NEEDS-ACTION",
-            }
-            .to_string()),
-        })
-        .collect();
-    let me = e["attendees"].as_array().into_iter().flatten().find(|a| a["self"].as_bool() == Some(true));
-    let declined = me.is_some_and(|a| a["responseStatus"].as_str() == Some("declined"));
-    let uid = e["iCalUID"].as_str().or(e["id"].as_str()).unwrap_or_default().to_string();
-    Some(CalendarEvent {
-        id: format!("{uid}@{}", start.timestamp()),
-        uid,
-        title: e["summary"].as_str().unwrap_or("Untitled meeting").to_string(),
-        start,
-        end,
-        link,
-        organizer: e["organizer"]["email"].as_str().map(|em| Attendee {
-            name: e["organizer"]["displayName"].as_str().map(str::to_string),
-            email: em.to_string(),
-            status: None,
-        }),
-        attendees,
-        description: description.map(str::to_string),
-        calendar: me.and_then(|a| a["email"].as_str()).map(str::to_string).or_else(|| e["calendarId"].as_str().map(str::to_string)),
-        declined,
-        recurring: e["recurringEventId"].is_string(),
-        html_link: e["htmlLink"].as_str().map(str::to_string),
-        calendar_name: e["calendarName"].as_str().map(str::to_string),
-        color: e["calendarColor"].as_str().map(str::to_string),
-    })
+    crate::google::map_event(e)
 }
 
 #[cfg(test)]
