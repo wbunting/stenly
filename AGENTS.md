@@ -51,6 +51,14 @@ file, so a local override must repeat these rules, not just add to them.
   are easy to read. Verify UI changes with a screenshot of an isolated test
   instance using synthetic data; dev variables such as `STENLY_PAGE=…`,
   `STENLY_OPEN_MEETING=…` and `STENLY_FAKE_RECORDING=1` help reach a state.
+- **Screenshot profiles must not touch real calendars.** `STENLY_CONFIG` and
+  `STENLY_DATA_DIR` do not isolate EventKit: macOS grants Calendar access per
+  app/user, not per profile, and a default config uses `source = "eventkit"`.
+  Start from `scripts/meeting-library-fixture.py` (it writes
+  `source = "ics"` with no URLs, so no calendar is queried), set
+  `STENLY_SHOW_WINDOW=1`, and do not set `STENLY_DEMO_EVENTS`. Coming Up then
+  shows its empty state. Look at every image before publishing it: every name,
+  event and meeting must come from the fixture.
 - Open native NSMenus from a spawned task (`ui::menu_in_view`), never while a
   GPUI borrow is held.
 
