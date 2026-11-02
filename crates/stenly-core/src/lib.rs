@@ -27,6 +27,7 @@ pub mod meeting_url;
 pub mod model_scores;
 pub mod note;
 pub mod platform;
+pub mod readiness;
 pub mod recipe;
 pub mod scheduler;
 pub mod secrets;

@@ -221,8 +221,18 @@ impl Snapshot {
     }
     /// The reason recording is blocked, for the notice at record time.
     pub fn blocked_message(&self) -> Option<String> {
+        self.blocked_message_for(true)
+    }
+
+    /// Like [`Snapshot::blocked_message`]. `purchase_offered` = the app can
+    /// transcribe, so paying makes sense; until then the message says to finish
+    /// setting up transcription first instead of pointing at the Buy button.
+    pub fn blocked_message_for(&self, purchase_offered: bool) -> Option<String> {
         if self.can_record() {
             return None;
+        }
+        if !purchase_offered && self.lapse.is_none() {
+            return Some(format!("You've used your {} free meetings. Finish setting up transcription first (Settings → Transcription), then you can add a licence. Your notes, search and dictation keep working.", self.free_meetings));
         }
         Some(match self.lapse {
             Some(Lapse::Revoked) => "Your Stenly licence is no longer valid, so new recordings are paused. Your notes are untouched. See Settings → Licence.".to_string(),

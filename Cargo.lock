@@ -6272,6 +6272,7 @@ dependencies = [
  "crossbeam-channel",
  "serde",
  "serde_json",
+ "sha2",
  "sherpa-onnx",
  "stenly-core",
  "tracing",

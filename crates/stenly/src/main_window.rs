@@ -116,6 +116,9 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
             let _ = h.update(cx, |this, window, cx| {
                 if let Some(p) = page {
                     this.page = p;
+                    if p == Page::Summaries {
+                        this.controller.update(cx, |c, cx| c.watch_summaries(cx));
+                    }
                 }
                 window.activate_window();
                 cx.notify();
@@ -527,6 +530,9 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                     subs.push(cx.observe(&context_ui, |_, _, cx| cx.notify()));
                     if page.or(env_page) == Some(Page::Context) {
                         context_ui.update(cx, |u, cx| u.on_open(cx));
+                    }
+                    if page.or(env_page) == Some(Page::Summaries) {
+                        controller.update(cx, |c, cx| c.watch_summaries(cx));
                     }
                     // Opened straight onto the Trash (STENLY_PAGE=trash): load it now.
                     let trash = if page.or(env_page) == Some(Page::Trash) { controller.read(cx).trash() } else { vec![] };
@@ -1413,6 +1419,11 @@ impl MainWindow {
         use gpui::{Animation, AnimationExt};
         const IDLE_W: f32 = 96.;
         let ctrl = self.controller.clone();
+        // Without the speech model a recording would have no transcript: the
+        // button stays (it explains and opens Transcription) but reads as unavailable.
+        let speech = self.controller.read(cx).speech_state();
+        let not_ready = !stenly_core::readiness::can_transcribe(&speech);
+        let tip: SharedString = format!("{}. Click to set it up.", speech.headline()).into();
         match self.effective_status(cx) {
             Status::Idle if glass_enabled() => glass_spot(
                 div()
@@ -1428,14 +1439,16 @@ impl MainWindow {
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(theme::text())
                     .child(crate::squircle::surface(crate::squircle::Surface::clear().radius(15.).hover(theme::hover())))
-                    .child(icon(icons::RECORD, 13., theme::red()))
+                    .child(icon(if not_ready { icons::ALERT } else { icons::RECORD }, 13., if not_ready { theme::amber() } else { theme::red() }))
                     .child("Record")
+                    .when(not_ready, |d| d.opacity(0.7).tooltip(move |_, cx| cx.new(|_| Tip(tip.clone())).into()))
                     .on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.start_now(cx))),
                 15.,
             )
             .into_any_element(),
-            Status::Idle => ui::button_lead_icon("record-now", "Record", Btn::Primary, icons::RECORD)
+            Status::Idle => ui::button_lead_icon("record-now", "Record", Btn::Primary, if not_ready { icons::ALERT } else { icons::RECORD })
                 .w(px(IDLE_W))
+                .when(not_ready, |d| d.opacity(0.7).tooltip(move |_, cx| cx.new(|_| Tip(tip.clone())).into()))
                 .on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.start_now(cx)))
                 .into_any_element(),
             Status::Recording { title, since } => {
@@ -1693,6 +1706,12 @@ impl MainWindow {
             self.controller.update(cx, |c, cx| {
                 c.refresh_permissions();
                 c.refresh_ollama(cx);
+                if page == Page::Summaries {
+                    c.watch_summaries(cx);
+                }
+                if page == Page::Transcription {
+                    c.verify_speech_models(cx);
+                }
             });
         }
         cx.notify();
@@ -2438,6 +2457,75 @@ impl MainWindow {
             .into_any_element()
     }
 
+    /// The persistent "transcription isn't ready" bar, above every page until
+    /// the speech model is installed and verified. Unlike the error bar it has
+    /// no Dismiss: it goes away only when the problem does.
+    fn speech_banner(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        use stenly_core::readiness::Speech;
+        let c = self.controller.read(cx);
+        let speech = c.speech_state();
+        // Settings → Transcription shows the same thing on the model card, with its own button.
+        if speech.is_ready() || self.meeting.is_some() || self.page == Page::Transcription {
+            return None;
+        }
+        let id = c.config.asr.model.clone();
+        let ctrl = self.controller.clone();
+        let (detail, action): (SharedString, AnyElement) = match &speech {
+            Speech::Ready => return None,
+            Speech::Downloading | Speech::Verifying => {
+                let pct = c.download(&id).map(|d| format!(" {:.0}%", d.fraction.max(0.0) * 100.)).unwrap_or_default();
+                ("Recording and dictation start working as soon as it's done.".into(), ui::pending("speech-wait", format!("{}{pct}", if speech == Speech::Verifying { "Checking" } else { "Downloading" })).into_any_element())
+            }
+            Speech::Failed(e) => (
+                e.clone().into(),
+                ui::button("speech-retry", "Retry", Btn::Primary).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.retry_download(&id, cx))).into_any_element(),
+            ),
+            Speech::Missing => (
+                "Recording and dictation need the speech model (about 650 MB, runs on this Mac).".into(),
+                ui::button("speech-download", "Download", Btn::Primary).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.download_asr(id.clone(), cx))).into_any_element(),
+            ),
+        };
+        let go = cx.listener(|this, _, _, cx| this.go(Page::Transcription, cx));
+        Some(
+            div()
+                .id("speech-banner")
+                .mb(px(14.))
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .px(px(12.))
+                .py(px(9.))
+                .rounded(px(10.))
+                .bg(theme::card())
+                .text_size(px(theme::BODY))
+                .child(icon(icons::ALERT, 14., theme::amber()))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.))
+                        .child(div().font_weight(FontWeight::MEDIUM).child(speech.headline()))
+                        .child(div().text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child(detail)),
+                )
+                .child(action)
+                .child(ui::button("speech-open", "Open Transcription", Btn::Ghost).on_click(go))
+                .into_any_element(),
+        )
+    }
+
+    /// A "✓ Ready / Not ready" line for the chosen summary provider.
+    pub(crate) fn summary_ready_chip(status: &stenly_core::readiness::Summaries) -> AnyElement {
+        use stenly_core::readiness::Summaries;
+        match status {
+            Summaries::Ready => ui::chip("Ready", Some(icons::CHECK), theme::green()).into_any_element(),
+            Summaries::Checking => ui::pending("summary-checking", "Checking…").into_any_element(),
+            Summaries::NotReady(_) => ui::chip("Not ready", Some(icons::ALERT), theme::amber()).into_any_element(),
+            Summaries::Off => ui::chip("Off", None, theme::muted()).into_any_element(),
+        }
+    }
+
     // ------------------------------------------------------------- AI models
     /// Transcription page (`asr = true`) or Summaries page.
     fn models(&self, asr: bool, cx: &mut Context<Self>) -> AnyElement {
@@ -2453,10 +2541,14 @@ impl MainWindow {
                 let dl = c.download(m.id).cloned();
                 let ctrl = self.controller.clone();
                 let id = m.id.to_string();
+                let failure = c.speech_failure.as_ref().filter(|(f, _)| f == m.id).map(|(_, e)| e.clone());
+                let verifying = c.speech_verifying && !installed;
                 let trailing: AnyElement = if let Some(d) = dl {
                     div().flex().flex_col().items_end().gap(px(6.)).child(div().text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child(format!("{} {:.0}%", d.status, d.fraction * 100.0))).child(ui::progress_bar(d.fraction, 140.)).into_any_element()
+                } else if verifying {
+                    ui::pending(SharedString::from(format!("verify-{id}")), "Checking…").into_any_element()
                 } else if active && installed {
-                    ui::chip("In Use", Some(icons::CHECK), theme::green()).into_any_element()
+                    ui::chip("Ready", Some(icons::CHECK), theme::green()).into_any_element()
                 } else if installed {
                     let ctrl2 = ctrl.clone();
                     let id2 = id.clone();
@@ -2467,16 +2559,24 @@ impl MainWindow {
                         .child(ui::button(SharedString::from(format!("use-{id}")), "Use", Btn::Primary).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.set("asr.model", id.as_str(), cx))))
                         .child(ui::more_button(SharedString::from(format!("rm-{id2}")), vec![ui::MenuEntry { symbol: Some("trash"), ..ui::MenuEntry::item("Remove Download") }], move |_, _, cx| ctrl2.update(cx, |c, cx| c.delete_asr(&id2, cx))))
                         .into_any_element()
+                } else if failure.is_some() {
+                    ui::button_icon(SharedString::from(format!("retry-{id}")), "Retry", Btn::Primary, icons::DOWNLOAD)
+                        .on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.retry_download(&id, cx)))
+                        .into_any_element()
                 } else {
                     ui::button(SharedString::from(format!("dl-{id}")), "Download", Btn::Ghost)
                         .on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.download_asr(id.clone(), cx)))
                         .into_any_element()
                 };
+                let detail = match &failure {
+                    Some(e) if !installed => format!("Download failed: {e}"),
+                    _ => format!("{} · {} MB", m.language, m.approx_mb),
+                };
                 model_card(
                     m.name,
                     if m.id.contains("v2") { Some("Recommended") } else { None },
                     vec![],
-                    &format!("{} · {} MB", m.language, m.approx_mb),
+                    &detail,
                     trailing,
                     active && installed,
                 )
@@ -2585,11 +2685,17 @@ impl MainWindow {
                 2 | 3 => stenly_core::cli_llm::Tool::parse(&cfg.llm.cli.tool).unwrap_or(Tool::Codex).disclosure().into(),
                 _ => "A model running in Ollama on this Mac. Nothing leaves it.".into(),
             };
+            let status = self.controller.read(cx).summary_status();
+            let desc: SharedString = match &status {
+                stenly_core::readiness::Summaries::NotReady(why) => format!("{why} {desc}").into(),
+                _ => desc,
+            };
+            let ready_chip = Self::summary_ready_chip(&status);
             ui::row(
                 None,
                 "Write summaries with",
                 Some(desc),
-                ui::popup("llm-source", &opts, source_now, move |v, cx| {
+                div().flex().items_center().gap(px(10.)).child(ready_chip).child(ui::popup("llm-source", &opts, source_now, move |v, cx| {
                     ctrl.update(cx, |c, cx| match v {
                         4 => {
                             c.api_test = crate::controller::ApiTest::Idle;
@@ -2599,7 +2705,7 @@ impl MainWindow {
                         3 => c.use_cli_tool(Tool::Claude, cx),
                         v => c.set("llm.provider", if v == 1 { "api" } else { "ollama" }, cx),
                     })
-                }),
+                })),
             )
             .into_any_element()
         };
@@ -3193,8 +3299,15 @@ impl Render for MainWindow {
             window.on_next_frame(|window, _| window.refresh());
             self.match_pending = false;
         }
-        let err = self.controller.read(cx).last_error.clone();
+        let (err, retry_id) = {
+            let c = self.controller.read(cx);
+            // A failed speech-model download is shown by the persistent banner
+            // (with Retry); don't repeat it in the dismissible error bar.
+            let covered = c.last_error_retry.as_deref().is_some_and(|id| id == c.config.asr.model && !c.speech_state().is_ready());
+            if covered { (None, None) } else { (c.last_error.clone(), c.last_error_retry.clone()) }
+        };
         let ctrl = self.controller.clone();
+        let speech_banner = self.speech_banner(cx);
         if glass_enabled() {
             self.sync_glass(window);
         }
@@ -3243,7 +3356,10 @@ impl Render for MainWindow {
                                     .px(px(28.))
                                     .pt(px(4.))
                                     .pb(px(40.))
+                                    .when_some(speech_banner, |d, b| d.child(b))
                                     .when_some(err, |d, e| {
+                                        let retry_id = retry_id.clone();
+                                        let ctrl_retry = ctrl.clone();
                                         d.child(
                                             div()
                                                 .id("err")
@@ -3258,10 +3374,17 @@ impl Render for MainWindow {
                                                 .text_size(px(theme::BODY))
                                                 .child(icon(icons::ALERT, 14., theme::amber()))
                                                 .child(div().flex_1().min_w_0().child(e.clone()))
+                                                .when_some(retry_id, |d, id| {
+                                                    d.child(ui::button("retry-err", "Retry", Btn::Primary).on_click(move |_, _, cx| {
+                                                        let id = id.clone();
+                                                        ctrl_retry.update(cx, |c, cx| c.retry_download(&id, cx))
+                                                    }))
+                                                })
                                                 .child(ui::button("dismiss-err", "Dismiss", Btn::Ghost).on_click(move |_, _, cx| {
                                                     cx.write_to_clipboard(ClipboardItem::new_string(e.clone()));
                                                     ctrl.update(cx, |c, cx| {
                                                         c.last_error = None;
+                                                        c.last_error_retry = None;
                                                         cx.notify();
                                                     })
                                                 })),

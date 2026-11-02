@@ -22,6 +22,9 @@ impl MainWindow {
         let notice = c.license_notice.clone();
         let ctrl = self.controller().clone();
         let state = snap.state();
+        // Paying makes no sense before the product can transcribe.
+        let speech = c.speech_state();
+        let can_buy = stenly_core::readiness::purchase_offered(&speech);
         let buy_url = license::checkout_url();
 
         let (glyph, tint) = match state {
@@ -35,7 +38,9 @@ impl MainWindow {
                 let l = snap.license.as_ref().expect("licensed has a licence");
                 format!("Key {} · one Mac · updates included. Checked {}.", l.masked_key, l.last_validated.with_timezone(&chrono::Local).format("%b %-d")).into()
             }
+            State::Trial if !can_buy => "Transcription isn't set up yet, so Stenly can't record. Set that up first; a one-time $10 licence comes after the free meetings.".into(),
             State::Trial => "After that, a one-time $10 licence keeps recording on this Mac. Updates are included.".into(),
+            State::Expired if !can_buy => "New meetings can't be recorded until transcription is set up and you add a licence. Your notes, search, sharing and dictation keep working.".into(),
             State::Expired => "New meetings can't be recorded until you add a licence. Your notes, search, sharing and dictation keep working.".into(),
         };
         let status_row = ui::row(
@@ -86,8 +91,27 @@ impl MainWindow {
             .into_any_element()
         };
 
-        // Buy: opens the hosted checkout in the browser.
-        let buy_row = {
+        // Buy: opens the hosted checkout in the browser, once transcription is set up.
+        // Until then the row says what to do instead and links to the fix. The row
+        // keeps its height, so nothing moves when the speech model finishes.
+        let buy_row = if !can_buy && state != State::Licensed {
+            let ctrl = ctrl.clone();
+            let why: SharedString = match &speech {
+                stenly_core::readiness::Speech::Downloading | stenly_core::readiness::Speech::Verifying => {
+                    "The speech model is still being set up. You can buy once it's ready.".into()
+                }
+                stenly_core::readiness::Speech::Failed(_) => "The speech model didn't download, so Stenly can't transcribe yet. Fix that, then you can buy.".into(),
+                _ => "Stenly can't transcribe until the speech model is downloaded. Set it up, then you can buy.".into(),
+            };
+            ui::row(
+                None,
+                stenly_core::readiness::FINISH_TRANSCRIPTION_FIRST,
+                Some(why),
+                ui::button("license-fix-transcription", "Set Up Transcription", Btn::Primary)
+                    .on_click(move |_, _, cx| ctrl.update(cx, |_, cx| cx.emit(crate::controller::ControllerEvent::SpeechNotReady))),
+            )
+            .into_any_element()
+        } else {
             let desc: SharedString = if buy_url.is_some() {
                 "$10 once, for one Mac. Updates included. Pay with a card or Apple Pay; VAT is handled for you.".into()
             } else {
