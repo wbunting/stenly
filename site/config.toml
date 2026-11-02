@@ -32,5 +32,10 @@ free_meetings = 10
 checkout_url = "https://buy.polar.sh/polar_cl_AW5WIhHP8358jeLjFn5luZWRAra4akTRm4syT4Ec1W8"
 # Team contact destination; dead placeholder until a contact flow exists.
 team_contact_url = "mailto:hello@stenly.ai?subject=Stenly%20for%20teams"
+# Contact address shown on /privacy/ and /terms/. Keep it empty until a real,
+# monitored address is confirmed: while it is empty both pages show a clearly marked
+# placeholder instead of inventing one. (team_contact_url above is a separate,
+# unconfirmed placeholder and is deliberately not reused.)
+legal_contact_email = ""
 # Optional external hosted service. No sign-in is advertised until this is set.
 hosted_url = ""
