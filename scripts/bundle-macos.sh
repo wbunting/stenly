@@ -22,6 +22,14 @@
 # the https checkout page the Buy button opens and STENLY_POLAR_ORG_ID the Polar
 # organization the app activates keys against. Both are public, not secrets.
 #
+# The DMG gets the standard install layout (Stenly.app, an /Applications link, a
+# fixed icon-view window and a background arrow) from a .DS_Store written by
+# dmgbuild (MIT), pinned in scripts/requirements-dmg.txt and installed into
+# target/dmgbuild-venv. No Finder/AppleScript session is needed, so it works
+# headless in CI. STENLY_DMGBUILD=/path/to/dmgbuild uses an existing install
+# instead. Needs python3 >= 3.10. Background: crates/stenly/assets/dmg-background*
+# (regenerate with scripts/generate-dmg-background.sh).
+#
 # STENLY_GOOGLE_CLIENT_ID / STENLY_GOOGLE_CLIENT_SECRET are the Google "Desktop
 # app" OAuth client behind "Sign in with Google" (docs/google-calendar.md). A
 # desktop client's secret is not confidential, but it is kept out of the
@@ -78,6 +86,20 @@ if [[ -n "$IDENTITY" || "$INSTALL" == true || "$REQUIRE_DEVELOPER_ID" == "1" || 
   echo "Using explicitly selected Developer ID Application identity."
 else
   echo "Creating an ad-hoc development DMG; it cannot be used with --install." >&2
+fi
+
+# Prepare dmgbuild before the (long) build so a missing Python fails fast.
+DMGBUILD=${STENLY_DMGBUILD:-}
+if [[ -z "$DMGBUILD" ]]; then
+  DMG_VENV=target/dmgbuild-venv
+  if ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))'; then
+    echo "python3 >= 3.10 is required to lay out the DMG (or set STENLY_DMGBUILD)." >&2
+    exit 1
+  fi
+  [[ -x "$DMG_VENV/bin/python" ]] || python3 -m venv "$DMG_VENV"
+  "$DMG_VENV/bin/python" -m pip install --quiet --disable-pip-version-check \
+    --require-hashes -r scripts/requirements-dmg.txt
+  DMGBUILD="$DMG_VENV/bin/dmgbuild"
 fi
 
 sign_file() {
@@ -208,9 +230,14 @@ if [[ "$UNIVERSAL" == "1" ]]; then
   done
 fi
 
-# Use a read-only compressed image. Its name is stable because site/config.toml
-# points at releases/latest/download/stenly-macos.dmg.
-hdiutil create -quiet -volname "Stenly" -srcfolder "$APP" -ov -format UDZO "$DMG"
+# Use a read-only compressed image (UDZO, set in dmg-settings.py) containing the
+# app, an /Applications link and the Finder layout. The name is stable because
+# site/config.toml points at releases/latest/download/stenly-macos.dmg.
+"$DMGBUILD" -s scripts/dmg-settings.py \
+  -D "app=$APP" \
+  -D "background=crates/stenly/assets/dmg-background.png" \
+  -D "icon=crates/stenly/assets/stenly.icns" \
+  "Stenly" "$DMG"
 codesign --force "${SIGN_ARGS[@]}" "$DMG"
 
 NOTARIZED=false

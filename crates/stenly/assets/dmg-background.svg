@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="660" height="400" viewBox="0 0 660 400">
+  <!-- Original artwork for the installer window. Colours match logo.svg. -->
+  <rect width="660" height="400" fill="#f4f2e9"/>
+  <g stroke="#25251f" stroke-opacity="0.55" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none">
+    <path d="M262 190H394"/>
+    <path d="M370 164l28 26-28 26"/>
+  </g>
+  <text x="330" y="306" text-anchor="middle" font-family="Helvetica Neue, Helvetica, Arial, sans-serif" font-size="15" fill="#25251f" fill-opacity="0.6">Drag Stenly to the Applications folder to install</text>
+</svg>

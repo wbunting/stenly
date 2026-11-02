@@ -85,6 +85,8 @@ elif name == 'install':
     shutil.copy2(safe(args[-2]), safe(args[-1]))
 elif name == 'hdiutil':
     safe(args[-1]).write_text('synthetic dmg')
+elif name == 'dmgbuild':
+    safe(args[-1]).write_text('synthetic laid-out dmg')
 elif name == 'lipo':
     if '-archs' in args:
         print('arm64 x86_64')
@@ -125,12 +127,13 @@ class BundleTests(unittest.TestCase):
         dispatch.write_text("#!" + os.sys.executable + "\n" + MOCK)
         dispatch.chmod(0o755)
         for name in ["security", "codesign", "cargo", "cp", "rm", "mv", "install",
-                     "hdiutil", "lipo", "xcrun", "pkill", "open"]:
+                     "hdiutil", "lipo", "xcrun", "pkill", "open", "dmgbuild"]:
             (self.root / "bin" / name).symlink_to(dispatch)
         self.env = {k: v for k, v in os.environ.items() if not k.startswith("STENLY_")}
         self.env.update(FIXTURE=str(self.root), TMPDIR=str(self.root / "tmp"),
                         PATH=str(self.root / "bin") + os.pathsep + os.environ["PATH"],
-                        STENLY_DIST_DIR=str(self.root / "dist"))
+                        STENLY_DIST_DIR=str(self.root / "dist"),
+                        STENLY_DMGBUILD=str(self.root / "bin/dmgbuild"))
 
     def run_bundle(self, *args, **env):
         self.env.update(env)
@@ -254,6 +257,24 @@ class BundleTests(unittest.TestCase):
         kill_index = next(i for i, c in enumerate(self.commands) if c[0] == "pkill")
         self.assertTrue(all(i < kill_index for i, c in enumerate(self.commands) if c[0] in ["cp", "mv"]))
         self.assertFalse(any(c[0] == "rm" and str(self.daily) in c for c in self.commands))
+
+    def test_dmg_is_laid_out_by_dmgbuild_from_settings(self):
+        settings = (ROOT / "scripts/dmg-settings.py").read_text()
+        for needle in ['symlinks = {"Applications": "/Applications"}', "icon-view", "window_rect",
+                       "icon_locations"]:
+            self.assertIn(needle, settings)
+        for asset in ["dmg-background.png", "dmg-background@2x.png"]:
+            self.assertTrue((ROOT / "crates/stenly/assets" / asset).exists())
+        self.assertEqual(self.run_bundle(), 0, self.result.stderr)
+        build = [c for c in self.commands if c[0] == "dmgbuild"]
+        self.assertEqual(len(build), 1)
+        self.assertIn("scripts/dmg-settings.py", build[0])
+        self.assertIn("app=dist/Stenly.app".replace("dist", str(self.root / "dist")), build[0])
+        self.assertEqual(build[0][-2:], ["Stenly", str(self.root / "dist/stenly-macos.dmg")])
+        self.assertEqual((self.root / "dist/stenly-macos.dmg").read_text(), "synthetic laid-out dmg")
+        # The image is signed after it is laid out.
+        sign_dmg = [i for i, c in enumerate(self.commands) if c[0] == "codesign" and c[-1].endswith(".dmg")]
+        self.assertTrue(sign_dmg and sign_dmg[0] > next(i for i, c in enumerate(self.commands) if c[0] == "dmgbuild"))
 
     def test_first_install(self):
         shutil.rmtree(self.daily)

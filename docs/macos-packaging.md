@@ -5,6 +5,25 @@
 `stenly-mcp`; all four executables are included in the app. Set
 `STENLY_UNIVERSAL=1` to build/package both arm64 and x86_64 slices.
 
+## Disk image layout
+
+The DMG opens as a fixed-size icon-view window with `Stenly.app` on the left, an
+`/Applications` symlink on the right and a drag arrow between them. The layout is
+a `.DS_Store` written directly by [dmgbuild](https://github.com/dmgbuild/dmgbuild)
+(MIT; with its MIT dependencies `ds_store` and `mac_alias`), so no Finder or
+AppleScript session is needed and it works in headless CI. The versions and
+hashes are pinned in `scripts/requirements-dmg.txt`; `bundle-macos.sh` installs
+them into `target/dmgbuild-venv` (needs `python3` 3.10 or newer; set
+`STENLY_DMGBUILD=/path/to/dmgbuild` to use an existing install). Window size,
+icon size and positions live in `scripts/dmg-settings.py`.
+
+The background is our own artwork: `crates/stenly/assets/dmg-background.svg`,
+rendered to the committed `dmg-background.png` and `dmg-background@2x.png` by
+`scripts/generate-dmg-background.sh` (needs `rsvg-convert`). If you change the
+background size, update `window_rect` in `dmg-settings.py` (window height =
+background height + 32 pt title bar). The image is signed, notarized and stapled
+after it is laid out, exactly as before.
+
 ## Development bundles (no installation)
 
 Without a signing identity, the script creates an **ad-hoc development DMG**.
