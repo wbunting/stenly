@@ -14,14 +14,13 @@ use stenly_core::voices::{MIN_EMBED_SECS, normalize};
 
 const EMBED_URL: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/speaker-recongition-models/nemo_en_titanet_small.onnx";
 const EMBED_FILE: &str = "nemo_en_titanet_small.onnx";
+const EMBED_SIZE: u64 = 40_257_283;
+const EMBED_SHA256: &str = "ad4a1802485d8b34c722d2a9d04249662f2ece5d28a7a039063ca22f515a789e";
 const RATE: i32 = 16_000;
 
 pub fn ensure_model(models_dir: &Path) -> Result<PathBuf> {
     let p = models_dir.join(EMBED_FILE);
-    if !p.is_file() {
-        std::fs::create_dir_all(models_dir)?;
-        crate::models::download_to(EMBED_URL, &p)?;
-    }
+    crate::models::download_verified(EMBED_URL, &p, EMBED_SIZE, EMBED_SHA256, &mut |_| {})?;
     Ok(p)
 }
 

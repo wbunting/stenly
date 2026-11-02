@@ -280,7 +280,7 @@ pub fn call_tool(name: &str, args: &Value) -> Result<String> {
             let hours = int_arg(args, "hours", 24, 336) as i64;
             let mut c = store.cfg.calendar.clone();
             c.require_meeting_link = false;
-            if c.ics_urls.is_empty() && c.kody_url.is_empty() {
+            if c.ics_urls.is_empty() && c.kody_url.is_empty() && !stenly_core::google::has_accounts() {
                 return Ok("No calendar connected in Stenly (Settings → Calendar).".into());
             }
             let (events, errors) = stenly_core::calendar::upcoming(&c, now, now + chrono::Duration::hours(hours));

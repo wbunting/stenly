@@ -162,6 +162,14 @@ fn main() {
                 ControllerEvent::DismissPopups => cx.defer(popup::close_all),
                 // Record was refused: show Settings → Licence, which says why and
                 // how to continue. Deferred so no window opens inside the event.
+                // Record was refused for lack of the speech model: Settings →
+                // Transcription has the Download / Retry button.
+                ControllerEvent::SpeechNotReady => {
+                    let ctrl = ctrl.clone();
+                    cx.defer(move |cx| {
+                        main_window::open(ctrl, Some(main_window::Page::Transcription), cx);
+                    });
+                }
                 ControllerEvent::LicenseBlocked => {
                     let ctrl = ctrl.clone();
                     cx.defer(move |cx| {

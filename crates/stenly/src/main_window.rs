@@ -116,6 +116,9 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
             let _ = h.update(cx, |this, window, cx| {
                 if let Some(p) = page {
                     this.page = p;
+                    if p == Page::Summaries {
+                        this.controller.update(cx, |c, cx| c.watch_summaries(cx));
+                    }
                 }
                 window.activate_window();
                 cx.notify();
@@ -528,6 +531,9 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                     if page.or(env_page) == Some(Page::Context) {
                         context_ui.update(cx, |u, cx| u.on_open(cx));
                     }
+                    if page.or(env_page) == Some(Page::Summaries) {
+                        controller.update(cx, |c, cx| c.watch_summaries(cx));
+                    }
                     // Opened straight onto the Trash (STENLY_PAGE=trash): load it now.
                     let trash = if page.or(env_page) == Some(Page::Trash) { controller.read(cx).trash() } else { vec![] };
                     let mut mw = MainWindow {
@@ -708,6 +714,36 @@ pub fn open_destinations(cx: &mut App) {
     }
 }
 
+/// One calendar in a list: colour dot, name, a one-line problem, on/off switch.
+fn calendar_toggle_row(id: SharedString, cal: &stenly_core::calendar::CalendarInfo, on: bool, problem: Option<&'static str>, on_toggle: impl Fn(&gpui::ClickEvent, &mut Window, &mut gpui::App) + 'static) -> AnyElement {
+    div()
+        .flex()
+        .items_center()
+        .gap(px(10.))
+        .min_h(px(40.))
+        .py(px(8.))
+        .child(div().size(px(10.)).flex_shrink_0().rounded_full().bg(cal.color.as_deref().map(theme::hex).unwrap_or(theme::muted())))
+        .child(
+            div()
+                .flex_1()
+                .min_w_0()
+                .flex()
+                .flex_col()
+                .gap(px(2.))
+                .child(
+                    div()
+                        .flex()
+                        .items_baseline()
+                        .gap(px(6.))
+                        .child(div().text_size(px(theme::BODY)).truncate().child(cal.name.clone()))
+                        .when(cal.primary, |d| d.child(div().text_size(px(theme::SUBHEAD)).text_color(theme::faint()).child("Primary"))),
+                )
+                .when_some(problem, |d, p| d.child(div().flex().items_center().gap(px(4.)).text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child(icon(icons::ALERT, 10., theme::amber())).child(p))),
+        )
+        .child(ui::toggle(id, on, on_toggle))
+        .into_any_element()
+}
+
 /// Calendar descriptions are often HTML (Google); show them as plain text.
 fn strip_html(s: &str) -> String {
     let s = s.replace("<br>", "\n").replace("<br/>", "\n").replace("<br />", "\n").replace("</p>", "\n");
@@ -810,24 +846,26 @@ pub fn default_kody_url() -> String {
     })
 }
 
-/// Source-list row, measured against a native NSOutlineView(.sourceList) on
-/// macOS 26: 24pt rows (+4pt rhythm), 8pt-radius selection, 15pt glyph in the
-/// label colour, 6pt glyph→label gap. The selection lives inside the panel's
-/// own 10pt inset so it never touches the glass edge.
+/// Source-list row, measured against a real Finder sidebar on macOS 26 (light
+/// and dark): 32pt row pitch (30pt row + 2pt gap), 13pt label, 18pt regular
+/// SF Symbol in the label colour inside a 22pt column, 6pt glyph→label gap.
+/// The selection lives inside the panel's own 10pt inset so it never touches
+/// the glass edge. Rows never shrink: a short window scrolls the list instead.
 fn nav_item(id: &'static str, label: &'static str, data: crate::icons::Sym, active: bool) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
         .flex()
         .items_center()
         .gap(px(6.))
-        .h(px(28.))
+        .h(px(30.))
+        .flex_shrink_0()
         .px(px(8.))
         .rounded(px(theme::concentric(SIDEBAR_PANEL_RADIUS, SIDEBAR_PAD)))
         .text_size(px(theme::BODY))
         .text_color(theme::text())
         .when(active, |d| d.bg(theme::sidebar_selection()))
         .when(!active, |d| d.hover(|s| s.bg(theme::hover())))
-        .child(div().w(px(18.)).flex().justify_center().child(icon(data, 14., if active { theme::text() } else { theme::muted() })))
+        .child(div().w(px(22.)).flex_shrink_0().flex().justify_center().child(icon(data, 18., theme::text())))
         .child(label)
 }
 
@@ -1381,6 +1419,11 @@ impl MainWindow {
         use gpui::{Animation, AnimationExt};
         const IDLE_W: f32 = 96.;
         let ctrl = self.controller.clone();
+        // Without the speech model a recording would have no transcript: the
+        // button stays (it explains and opens Transcription) but reads as unavailable.
+        let speech = self.controller.read(cx).speech_state();
+        let not_ready = !stenly_core::readiness::can_transcribe(&speech);
+        let tip: SharedString = format!("{}. Click to set it up.", speech.headline()).into();
         match self.effective_status(cx) {
             Status::Idle if glass_enabled() => glass_spot(
                 div()
@@ -1396,14 +1439,16 @@ impl MainWindow {
                     .font_weight(FontWeight::MEDIUM)
                     .text_color(theme::text())
                     .child(crate::squircle::surface(crate::squircle::Surface::clear().radius(15.).hover(theme::hover())))
-                    .child(icon(icons::RECORD, 13., theme::red()))
+                    .child(icon(if not_ready { icons::ALERT } else { icons::RECORD }, 13., if not_ready { theme::amber() } else { theme::red() }))
                     .child("Record")
+                    .when(not_ready, |d| d.opacity(0.7).tooltip(move |_, cx| cx.new(|_| Tip(tip.clone())).into()))
                     .on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.start_now(cx))),
                 15.,
             )
             .into_any_element(),
-            Status::Idle => ui::button_lead_icon("record-now", "Record", Btn::Primary, icons::RECORD)
+            Status::Idle => ui::button_lead_icon("record-now", "Record", Btn::Primary, if not_ready { icons::ALERT } else { icons::RECORD })
                 .w(px(IDLE_W))
+                .when(not_ready, |d| d.opacity(0.7).tooltip(move |_, cx| cx.new(|_| Tip(tip.clone())).into()))
                 .on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.start_now(cx)))
                 .into_any_element(),
             Status::Recording { title, since } => {
@@ -1661,6 +1706,12 @@ impl MainWindow {
             self.controller.update(cx, |c, cx| {
                 c.refresh_permissions();
                 c.refresh_ollama(cx);
+                if page == Page::Summaries {
+                    c.watch_summaries(cx);
+                }
+                if page == Page::Transcription {
+                    c.verify_speech_models(cx);
+                }
             });
         }
         cx.notify();
@@ -1672,8 +1723,9 @@ impl MainWindow {
         let item = |id, label, data, p: Page, cx: &mut Context<Self>| {
             nav_item(id, label, data, page == p && !(in_meeting && p != Page::Home)).on_click(cx.listener(move |this, _, _, cx| this.go(p, cx)))
         };
-        // Group header: 11pt semibold tertiary label, aligned to the row text.
-        let section = |t: &'static str| div().pl(px(8.)).pt(px(14.)).pb(px(4.)).text_size(px(theme::SUBHEAD)).font_weight(FontWeight::SEMIBOLD).text_color(theme::faint()).child(t);
+        // Group header (Finder): 11pt semibold secondary label, 24pt from the
+        // panel edge, 16pt of air above.
+        let section = |t: &'static str| div().flex_shrink_0().pl(px(6.)).pt(px(16.)).h(px(32.)).text_size(px(theme::SUBHEAD)).font_weight(FontWeight::SEMIBOLD).text_color(theme::muted()).child(t);
         let glass = glass_enabled();
         div()
             .w(px(SIDEBAR_W))
@@ -1685,33 +1737,47 @@ impl MainWindow {
             .when(!glass, |d| d.bg(theme::sidebar()).border_r_1().border_color(theme::divider()))
             .flex()
             .flex_col()
-            .gap(px(2.))
             // Rows sit 10pt inside the panel (panel itself is 8pt from the edge).
             .px(px(if glass { SIDEBAR_INSET + SIDEBAR_PAD } else { SIDEBAR_PAD }))
             // Below the traffic lights (titlebar band is 52pt).
             .pt(px(60.))
             // Same gap to the panel's bottom edge as to its sides (concentric Trash row).
             .pb(px(if glass { SIDEBAR_INSET + SIDEBAR_PAD } else { SIDEBAR_PAD }))
-            .child(item("nav-home", "Meetings", icons::WAVE, Page::Home, cx))
-            .child(item("nav-history", "Dictations", icons::QUOTE, Page::History, cx))
-            .child(section("Settings"))
-            .child(item("nav-prefs", "General", icons::GEAR, Page::Preferences, cx))
-            .child(item("nav-you", "You", icons::USERS, Page::You, cx))
-            .child(item("nav-cal", "Calendar", icons::CALENDAR, Page::Calendar, cx))
-            .child(item("nav-dictation", "Dictation", icons::KEYBOARD, Page::Dictation, cx))
-            .child(item("nav-mics", "Microphones", icons::MIC, Page::Microphones, cx))
-            .child(item("nav-asr", "Transcription", icons::WAVE, Page::Transcription, cx))
-            .child(item("nav-llm", "Summaries", icons::SPARKLES, Page::Summaries, cx))
-            .child(item("nav-templates", "Templates", icons::FILE_TEXT, Page::Templates, cx))
-            .child(item("nav-recipes", "Recipes", icons::RECIPE, Page::Recipes, cx))
-            .child(item("nav-notes", "Notes & Storage", icons::FOLDER, Page::Notes, cx))
-            .child(item("nav-context", "Context", icons::USERS, Page::Context, cx))
-            .child(item("nav-dest", "Destinations", icons::PAPERPLANE, Page::Destinations, cx))
-            .child(item("nav-perms", "Privacy", icons::SHIELD, Page::Permissions, cx))
-            .child(item("nav-license", "Licence", icons::LOCK, Page::License, cx))
-            // Trash sits at the foot of the sidebar, out of the way (Granola, Finder).
-            .child(div().flex_1())
-            .child(item("nav-trash", "Trash", icons::TRASH, Page::Trash, cx))
+            .child(
+                div()
+                    .id("sidebar-scroll")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .child(
+                        div()
+                            .min_h_full()
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .child(item("nav-home", "Meetings", icons::WAVE, Page::Home, cx))
+                            .child(item("nav-history", "Dictations", icons::QUOTE, Page::History, cx))
+                            .child(section("Settings"))
+                            .child(item("nav-prefs", "General", icons::GEAR, Page::Preferences, cx))
+                            .child(item("nav-you", "You", icons::USERS, Page::You, cx))
+                            .child(item("nav-cal", "Calendar", icons::CALENDAR, Page::Calendar, cx))
+                            .child(item("nav-dictation", "Dictation", icons::KEYBOARD, Page::Dictation, cx))
+                            .child(item("nav-mics", "Microphones", icons::MIC, Page::Microphones, cx))
+                            .child(item("nav-asr", "Transcription", icons::WAVE, Page::Transcription, cx))
+                            .child(item("nav-llm", "Summaries", icons::SPARKLES, Page::Summaries, cx))
+                            .child(item("nav-templates", "Templates", icons::FILE_TEXT, Page::Templates, cx))
+                            .child(item("nav-recipes", "Recipes", icons::RECIPE, Page::Recipes, cx))
+                            .child(item("nav-notes", "Notes & Storage", icons::FOLDER, Page::Notes, cx))
+                            .child(item("nav-context", "Context", icons::USERS, Page::Context, cx))
+                            .child(item("nav-dest", "Destinations", icons::PAPERPLANE, Page::Destinations, cx))
+                            .child(item("nav-perms", "Privacy", icons::SHIELD, Page::Permissions, cx))
+                            .child(item("nav-license", "Licence", icons::LOCK, Page::License, cx))
+                            // Trash sits at the foot of the list: pinned to the bottom when
+                            // there is room, reachable by scrolling when there isn't.
+                            .child(div().flex_1().min_h(px(8.)))
+                            .child(item("nav-trash", "Trash", icons::TRASH, Page::Trash, cx))
+                    ),
+            )
             .into_any_element()
     }
 
@@ -1847,7 +1913,7 @@ impl MainWindow {
             );
         }
 
-        let no_calendar = !c.uses_eventkit() && c.config.calendar.kody_url.is_empty() && c.config.calendar.ics_urls.is_empty();
+        let no_calendar = !c.uses_eventkit() && c.config.calendar.kody_url.is_empty() && c.config.calendar.ics_urls.is_empty() && c.google.accounts.is_empty();
         let (empty_title, empty_desc) = if no_calendar {
             ("No calendar connected", "Connect one and Stenly will offer to record a minute before each call.")
         } else if !c.calendar_errors.is_empty() && c.events.is_empty() {
@@ -2048,7 +2114,10 @@ impl MainWindow {
         div()
             .flex()
             .flex_col()
-            .child(ui::caption("Who you are"))
+            .child(ui::caption_with_note(
+                "Who you are",
+                "Stenly uses this to recognise your voice and name in meetings, so the transcript and summary credit you with what you said and your action items.",
+            ))
             .child(ui::card(vec![
                 name_row,
                 list_row("Email addresses", "Every address you get invites at, work and personal.", chips("me.emails", &me.emails, &ctrl), self.me_email.clone()),
@@ -2074,6 +2143,8 @@ impl MainWindow {
         let cal_status = c.calendars_status.clone();
         let fetched = c.calendar_fetched;
         let errors = c.calendar_errors.clone();
+        let google = c.google.clone();
+        let google_available = c.google_available();
         // One plain-language problem statement instead of raw error chains.
         let kody_err = cal_status.clone().and_then(|s| s.err()).filter(|_| calendars.is_empty());
         let failing = kody_err.is_some() || errors.iter().any(|e| e.starts_with("Google Calendar (via Kody)"));
@@ -2196,6 +2267,102 @@ impl MainWindow {
             })
             .collect();
 
+        // ---- Sign in with Google (native OAuth): accounts, then each account's calendars.
+        let mut google_rows: Vec<AnyElement> = google
+            .accounts
+            .iter()
+            .enumerate()
+            .map(|(i, email)| {
+                let expired = google.needs_signin.iter().any(|a| a == email);
+                let (ctrl_out, ctrl_in) = (self.controller.clone(), self.controller.clone());
+                let out_email = email.clone();
+                let status: SharedString = if expired {
+                    "Sign-in expired. Sign in again to keep syncing.".into()
+                } else {
+                    match fetched {
+                        Some(t) => format!("Synced at {}", t.with_timezone(&Local).format("%-I:%M %p")).into(),
+                        None => "Syncing…".into(),
+                    }
+                };
+                ui::row(
+                    Some(icons::CALENDAR),
+                    email.clone(),
+                    Some(status),
+                    div()
+                        .flex()
+                        .items_center()
+                        .gap(px(6.))
+                        .when(expired && google_available, |d| d.child(ui::button(("google-again", i), "Sign In Again", Btn::Accent).on_click(move |_, _, cx| ctrl_in.update(cx, |c, cx| c.sign_in_google(cx)))))
+                        .child(ui::more_button(("google-more", i), vec![ui::MenuEntry::item("Sign Out")], move |_, _, cx| {
+                            let e = out_email.clone();
+                            ctrl_out.update(cx, |c, cx| c.sign_out_google(&e, cx))
+                        })),
+                )
+                .into_any_element()
+            })
+            .collect();
+        if google_available {
+            let ctrl = self.controller.clone();
+            let ctrl_cancel = self.controller.clone();
+            let first = google.accounts.is_empty();
+            google_rows.push(
+                ui::row(
+                    Some(icons::CALENDAR),
+                    if first { "Sign in with Google" } else { "Add another Google account" },
+                    Some(if first { "Read-only access to your events, guests and call links. Stenly never changes your calendar.".into() } else { "Work and personal accounts can be watched together.".into() }),
+                    if google.signing_in {
+                        div()
+                            .flex()
+                            .items_center()
+                            .gap(px(8.))
+                            .child(ui::pending("google-wait", "Waiting for browser…"))
+                            .child(ui::button("google-cancel", "Cancel", Btn::Ghost).on_click(move |_, _, cx| ctrl_cancel.update(cx, |c, cx| c.cancel_google_sign_in(cx))))
+                            .into_any_element()
+                    } else {
+                        ui::button("google-signin", if first { "Sign in with Google" } else { "Add Account" }, if first { Btn::Accent } else { Btn::Ghost })
+                            .on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.sign_in_google(cx)))
+                            .into_any_element()
+                    },
+                )
+                .into_any_element(),
+            );
+        }
+        let google_on = !google_rows.is_empty();
+        let google_cal_sections: Vec<AnyElement> = google
+            .accounts
+            .iter()
+            .filter_map(|email| {
+                let cals: Vec<&stenly_core::calendar::CalendarInfo> = google.calendars.iter().filter(|c| c.account.as_deref().is_some_and(|a| a.eq_ignore_ascii_case(email))).collect();
+                if cals.is_empty() {
+                    return None;
+                }
+                let ids = &cfg.calendar.google_calendar_ids;
+                let rows: Vec<AnyElement> = cals
+                    .iter()
+                    .enumerate()
+                    .map(|(i, cal)| {
+                        let on = ids.contains(&cal.id) || (ids.is_empty() && cal.primary);
+                        let key = cal.id.clone();
+                        let ctrl = self.controller.clone();
+                        let problem = on.then(|| errors.iter().find(|e| e.contains(&format!("“{}”", cal.name))).cloned()).flatten();
+                        calendar_toggle_row(
+                            SharedString::from(format!("gcal-{email}-{i}")),
+                            cal,
+                            on,
+                            problem.map(|p| if p.contains("won't share") { "Events aren't shared with this account" } else { "Couldn't load events" }),
+                            move |_, _, cx| {
+                                let k = key.clone();
+                                ctrl.update(cx, |c, cx| c.toggle_google_calendar(&k, cx))
+                            },
+                        )
+                    })
+                    .collect();
+                Some(div().flex().flex_col().child(ui::caption(email.clone())).child(ui::card(rows)).into_any_element())
+            })
+            .collect();
+        let google_error = google.error.clone();
+        let google_list_error = google.status.clone().and_then(|s| s.err()).filter(|_| google.calendars.is_empty() && google.needs_signin.is_empty());
+
         let ics_rows: Vec<AnyElement> = cfg
             .calendar
             .ics_urls
@@ -2254,6 +2421,10 @@ impl MainWindow {
                 let ctrl = self.controller.clone();
                 ui::row(Some(icons::CALENDAR), "Use the calendars on this Mac", Some("Switch back to the accounts already in Calendar.app.".into()), ui::button("eventkit-use", "Use This Mac", Btn::Ghost).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.set_calendar_source("eventkit", cx)))).into_any_element()
             }])))
+            .when(google_on, |d| d.child(ui::caption("Google Calendar")).child(ui::card(google_rows)))
+            .when_some(google_error, |d, e| d.child(div().px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).text_color(theme::red()).child(e)))
+            .when_some(google_list_error, |d, e| d.child(div().px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child(e)))
+            .children(google_cal_sections)
             .when(!calendars.is_empty(), |d| d.child(ui::caption("Calendars")).child(ui::card(cal_rows)))
             // Non-Kody problems (an ICS feed) still surface, one line each.
             .children(errors.into_iter()
@@ -2261,7 +2432,9 @@ impl MainWindow {
                 // the actionable state, not an alarming failed-sync message.
                 .filter(|e| !(eventkit && calendar_permission == stenly_core::platform::PermissionState::NotDetermined && e.starts_with("Calendars on this Mac:")))
                 .filter(|e| !e.starts_with("Google Calendar (via Kody)"))
-                .filter(|e| !calendars.iter().any(|c| e.contains(&format!("“{}”", c.name))))
+                // Sign-in problems show on the account's own row.
+                .filter(|e| !stenly_core::google::is_reauth(e))
+                .filter(|e| !calendars.iter().chain(google.calendars.iter()).any(|c| e.contains(&format!("“{}”", c.name))))
                 .take(3).map(|e| {
                     div().flex().items_start().gap(px(6.)).px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).line_height(px(15.)).text_color(theme::muted()).child(icon(icons::ALERT, 11., theme::amber())).child(div().flex_1().min_w_0().child(e))
                 }))
@@ -2284,6 +2457,75 @@ impl MainWindow {
             .into_any_element()
     }
 
+    /// The persistent "transcription isn't ready" bar, above every page until
+    /// the speech model is installed and verified. Unlike the error bar it has
+    /// no Dismiss: it goes away only when the problem does.
+    fn speech_banner(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        use stenly_core::readiness::Speech;
+        let c = self.controller.read(cx);
+        let speech = c.speech_state();
+        // Settings → Transcription shows the same thing on the model card, with its own button.
+        if speech.is_ready() || self.meeting.is_some() || self.page == Page::Transcription {
+            return None;
+        }
+        let id = c.config.asr.model.clone();
+        let ctrl = self.controller.clone();
+        let (detail, action): (SharedString, AnyElement) = match &speech {
+            Speech::Ready => return None,
+            Speech::Downloading | Speech::Verifying => {
+                let pct = c.download(&id).map(|d| format!(" {:.0}%", d.fraction.max(0.0) * 100.)).unwrap_or_default();
+                ("Recording and dictation start working as soon as it's done.".into(), ui::pending("speech-wait", format!("{}{pct}", if speech == Speech::Verifying { "Checking" } else { "Downloading" })).into_any_element())
+            }
+            Speech::Failed(e) => (
+                e.clone().into(),
+                ui::button("speech-retry", "Retry", Btn::Primary).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.retry_download(&id, cx))).into_any_element(),
+            ),
+            Speech::Missing => (
+                "Recording and dictation need the speech model (about 650 MB, runs on this Mac).".into(),
+                ui::button("speech-download", "Download", Btn::Primary).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.download_asr(id.clone(), cx))).into_any_element(),
+            ),
+        };
+        let go = cx.listener(|this, _, _, cx| this.go(Page::Transcription, cx));
+        Some(
+            div()
+                .id("speech-banner")
+                .mb(px(14.))
+                .flex()
+                .items_center()
+                .gap(px(10.))
+                .px(px(12.))
+                .py(px(9.))
+                .rounded(px(10.))
+                .bg(theme::card())
+                .text_size(px(theme::BODY))
+                .child(icon(icons::ALERT, 14., theme::amber()))
+                .child(
+                    div()
+                        .flex_1()
+                        .min_w_0()
+                        .flex()
+                        .flex_col()
+                        .gap(px(2.))
+                        .child(div().font_weight(FontWeight::MEDIUM).child(speech.headline()))
+                        .child(div().text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child(detail)),
+                )
+                .child(action)
+                .child(ui::button("speech-open", "Open Transcription", Btn::Ghost).on_click(go))
+                .into_any_element(),
+        )
+    }
+
+    /// A "✓ Ready / Not ready" line for the chosen summary provider.
+    pub(crate) fn summary_ready_chip(status: &stenly_core::readiness::Summaries) -> AnyElement {
+        use stenly_core::readiness::Summaries;
+        match status {
+            Summaries::Ready => ui::chip("Ready", Some(icons::CHECK), theme::green()).into_any_element(),
+            Summaries::Checking => ui::pending("summary-checking", "Checking…").into_any_element(),
+            Summaries::NotReady(_) => ui::chip("Not ready", Some(icons::ALERT), theme::amber()).into_any_element(),
+            Summaries::Off => ui::chip("Off", None, theme::muted()).into_any_element(),
+        }
+    }
+
     // ------------------------------------------------------------- AI models
     /// Transcription page (`asr = true`) or Summaries page.
     fn models(&self, asr: bool, cx: &mut Context<Self>) -> AnyElement {
@@ -2299,10 +2541,14 @@ impl MainWindow {
                 let dl = c.download(m.id).cloned();
                 let ctrl = self.controller.clone();
                 let id = m.id.to_string();
+                let failure = c.speech_failure.as_ref().filter(|(f, _)| f == m.id).map(|(_, e)| e.clone());
+                let verifying = c.speech_verifying && !installed;
                 let trailing: AnyElement = if let Some(d) = dl {
                     div().flex().flex_col().items_end().gap(px(6.)).child(div().text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child(format!("{} {:.0}%", d.status, d.fraction * 100.0))).child(ui::progress_bar(d.fraction, 140.)).into_any_element()
+                } else if verifying {
+                    ui::pending(SharedString::from(format!("verify-{id}")), "Checking…").into_any_element()
                 } else if active && installed {
-                    ui::chip("In Use", Some(icons::CHECK), theme::green()).into_any_element()
+                    ui::chip("Ready", Some(icons::CHECK), theme::green()).into_any_element()
                 } else if installed {
                     let ctrl2 = ctrl.clone();
                     let id2 = id.clone();
@@ -2313,16 +2559,24 @@ impl MainWindow {
                         .child(ui::button(SharedString::from(format!("use-{id}")), "Use", Btn::Primary).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.set("asr.model", id.as_str(), cx))))
                         .child(ui::more_button(SharedString::from(format!("rm-{id2}")), vec![ui::MenuEntry { symbol: Some("trash"), ..ui::MenuEntry::item("Remove Download") }], move |_, _, cx| ctrl2.update(cx, |c, cx| c.delete_asr(&id2, cx))))
                         .into_any_element()
+                } else if failure.is_some() {
+                    ui::button_icon(SharedString::from(format!("retry-{id}")), "Retry", Btn::Primary, icons::DOWNLOAD)
+                        .on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.retry_download(&id, cx)))
+                        .into_any_element()
                 } else {
                     ui::button(SharedString::from(format!("dl-{id}")), "Download", Btn::Ghost)
                         .on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.download_asr(id.clone(), cx)))
                         .into_any_element()
                 };
+                let detail = match &failure {
+                    Some(e) if !installed => format!("Download failed: {e}"),
+                    _ => format!("{} · {} MB", m.language, m.approx_mb),
+                };
                 model_card(
                     m.name,
                     if m.id.contains("v2") { Some("Recommended") } else { None },
                     vec![],
-                    &format!("{} · {} MB", m.language, m.approx_mb),
+                    &detail,
                     trailing,
                     active && installed,
                 )
@@ -2431,11 +2685,17 @@ impl MainWindow {
                 2 | 3 => stenly_core::cli_llm::Tool::parse(&cfg.llm.cli.tool).unwrap_or(Tool::Codex).disclosure().into(),
                 _ => "A model running in Ollama on this Mac. Nothing leaves it.".into(),
             };
+            let status = self.controller.read(cx).summary_status();
+            let desc: SharedString = match &status {
+                stenly_core::readiness::Summaries::NotReady(why) => format!("{why} {desc}").into(),
+                _ => desc,
+            };
+            let ready_chip = Self::summary_ready_chip(&status);
             ui::row(
                 None,
                 "Write summaries with",
                 Some(desc),
-                ui::popup("llm-source", &opts, source_now, move |v, cx| {
+                div().flex().items_center().gap(px(10.)).child(ready_chip).child(ui::popup("llm-source", &opts, source_now, move |v, cx| {
                     ctrl.update(cx, |c, cx| match v {
                         4 => {
                             c.api_test = crate::controller::ApiTest::Idle;
@@ -2445,7 +2705,7 @@ impl MainWindow {
                         3 => c.use_cli_tool(Tool::Claude, cx),
                         v => c.set("llm.provider", if v == 1 { "api" } else { "ollama" }, cx),
                     })
-                }),
+                })),
             )
             .into_any_element()
         };
@@ -3039,8 +3299,15 @@ impl Render for MainWindow {
             window.on_next_frame(|window, _| window.refresh());
             self.match_pending = false;
         }
-        let err = self.controller.read(cx).last_error.clone();
+        let (err, retry_id) = {
+            let c = self.controller.read(cx);
+            // A failed speech-model download is shown by the persistent banner
+            // (with Retry); don't repeat it in the dismissible error bar.
+            let covered = c.last_error_retry.as_deref().is_some_and(|id| id == c.config.asr.model && !c.speech_state().is_ready());
+            if covered { (None, None) } else { (c.last_error.clone(), c.last_error_retry.clone()) }
+        };
         let ctrl = self.controller.clone();
+        let speech_banner = self.speech_banner(cx);
         if glass_enabled() {
             self.sync_glass(window);
         }
@@ -3089,7 +3356,10 @@ impl Render for MainWindow {
                                     .px(px(28.))
                                     .pt(px(4.))
                                     .pb(px(40.))
+                                    .when_some(speech_banner, |d, b| d.child(b))
                                     .when_some(err, |d, e| {
+                                        let retry_id = retry_id.clone();
+                                        let ctrl_retry = ctrl.clone();
                                         d.child(
                                             div()
                                                 .id("err")
@@ -3104,10 +3374,17 @@ impl Render for MainWindow {
                                                 .text_size(px(theme::BODY))
                                                 .child(icon(icons::ALERT, 14., theme::amber()))
                                                 .child(div().flex_1().min_w_0().child(e.clone()))
+                                                .when_some(retry_id, |d, id| {
+                                                    d.child(ui::button("retry-err", "Retry", Btn::Primary).on_click(move |_, _, cx| {
+                                                        let id = id.clone();
+                                                        ctrl_retry.update(cx, |c, cx| c.retry_download(&id, cx))
+                                                    }))
+                                                })
                                                 .child(ui::button("dismiss-err", "Dismiss", Btn::Ghost).on_click(move |_, _, cx| {
                                                     cx.write_to_clipboard(ClipboardItem::new_string(e.clone()));
                                                     ctrl.update(cx, |c, cx| {
                                                         c.last_error = None;
+                                                        c.last_error_retry = None;
                                                         cx.notify();
                                                     })
                                                 })),

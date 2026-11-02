@@ -96,6 +96,25 @@ pub fn set_license_item(name: &str, value: &str) -> anyhow::Result<()> {
     if value.trim().is_empty() { delete(LICENSE_SERVICE, &account) } else { set(LICENSE_SERVICE, &account, value.trim(), "Stenly licence") }
 }
 
+/// Google Calendar sign-ins (OAuth tokens for every signed-in account, as JSON,
+/// see `google`). One item per profile, like the licence: an isolated profile
+/// (`STENLY_CONFIG`) never reads or replaces the everyday app's sign-ins.
+const GOOGLE_SERVICE: &str = "ai.stenly.google-calendar";
+
+fn google_account() -> String {
+    license_account("accounts")
+}
+
+pub fn google_accounts() -> Option<String> {
+    get(GOOGLE_SERVICE, &google_account())
+}
+
+/// Store (or with "" remove) the Google Calendar sign-ins.
+pub fn set_google_accounts(json: &str) -> anyhow::Result<()> {
+    let account = google_account();
+    if json.trim().is_empty() { delete(GOOGLE_SERVICE, &account) } else { set(GOOGLE_SERVICE, &account, json.trim(), "Stenly Google Calendar sign-in") }
+}
+
 fn valid_account(a: &str) -> bool {
     !a.is_empty() && a.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
 }

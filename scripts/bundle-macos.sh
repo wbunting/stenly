@@ -30,6 +30,11 @@
 # instead. Needs python3 >= 3.10. Background: crates/stenly/assets/dmg-background*
 # (regenerate with scripts/generate-dmg-background.sh).
 #
+# STENLY_GOOGLE_CLIENT_ID / STENLY_GOOGLE_CLIENT_SECRET are the Google "Desktop
+# app" OAuth client behind "Sign in with Google" (docs/google-calendar.md). A
+# desktop client's secret is not confidential, but it is kept out of the
+# repository. Without an id the app builds without Google sign-in.
+#
 # STENLY_DIST_DIR selects the output directory. A non-default name or
 # identifier is useful for a local permission-safe test and is refused with
 # --install, so the daily-use /Applications/Stenly.app is never replaced by it.

@@ -97,6 +97,15 @@ enum Cmd {
     },
     /// List Google calendars available through Kody.
     KodyCalendars,
+    /// Sign in to a Google account in your browser; its calendars feed `upcoming`, the app and MCP.
+    GoogleLogin,
+    /// Sign out of a Google account (all of them without an address).
+    GoogleLogout {
+        /// The account's email.
+        email: Option<String>,
+    },
+    /// List the signed-in Google accounts and their calendars (● = watched).
+    GoogleCalendars,
     /// Sign in with ChatGPT in your browser; summaries then use your ChatGPT plan.
     ChatgptLogin,
     /// Forget the ChatGPT sign-in.
@@ -484,8 +493,8 @@ fn main() -> Result<()> {
             let to = now + chrono::Duration::hours(hours);
             if c.source.uses_eventkit() && platform.calendar.is_none() {
                 eprintln!("EventKit is only available on macOS; use calendar.source = \"ics\" and calendar.ics_urls in {}", paths.config_file.display());
-            } else if !c.source.uses_eventkit() && c.ics_urls.is_empty() && (!c.source.uses_kody() || c.kody_url.is_empty()) {
-                eprintln!("no calendar connected; add an ICS URL in Settings → Calendar or set calendar.ics_urls in {}", paths.config_file.display());
+            } else if !c.source.uses_eventkit() && c.ics_urls.is_empty() && (!c.source.uses_kody() || c.kody_url.is_empty()) && !stenly_core::google::has_accounts() {
+                eprintln!("no calendar connected; sign in with Google or add an ICS URL in Settings → Calendar (or `stenly-cli google-login`), or set calendar.ics_urls in {}", paths.config_file.display());
             }
             let (mut events, mut errors) = stenly_core::calendar::upcoming(&c, now, to);
             if c.source.uses_eventkit() {
@@ -520,6 +529,41 @@ fn main() -> Result<()> {
             })?;
             Config::set_value("calendar.kody_url", auth.base_url.as_str().into())?;
             eprintln!("connected to {}", auth.base_url);
+        }
+        Cmd::GoogleLogin => {
+            anyhow::ensure!(stenly_core::google::configured(), "this build of Stenly has no Google sign-in (STENLY_GOOGLE_CLIENT_ID was not set at build time)");
+            let client = stenly_core::google::Client::system();
+            let email = client.sign_in(&|u| {
+                eprintln!("opening browser… if nothing happens, visit:\n{u}");
+                let _ = std::process::Command::new(if cfg!(target_os = "macos") { "open" } else { "xdg-open" }).arg(u).status();
+            }, &|| false)?;
+            // First account: watch its primary calendar (an empty list already means that).
+            eprintln!("signed in as {email}");
+        }
+        Cmd::GoogleLogout { email } => {
+            let client = stenly_core::google::Client::system();
+            let targets = match email {
+                Some(e) => vec![e],
+                None => client.accounts(),
+            };
+            anyhow::ensure!(!targets.is_empty(), "no Google account is signed in");
+            for e in targets {
+                client.sign_out(&e);
+                eprintln!("signed out of {e}");
+            }
+        }
+        Cmd::GoogleCalendars => {
+            let client = stenly_core::google::Client::system();
+            anyhow::ensure!(!client.accounts().is_empty(), "no Google account is signed in; run `stenly-cli google-login`");
+            let (cals, errors) = client.list_calendars();
+            for cal in cals {
+                let ids = &cfg.calendar.google_calendar_ids;
+                let on = ids.contains(&cal.id) || (ids.is_empty() && cal.primary);
+                println!("{} {:<32} {}", if on { "●" } else { "○" }, cal.name, cal.id);
+            }
+            for e in errors {
+                eprintln!("error: {e}");
+            }
         }
         Cmd::ChatgptLogin => {
             let acct = stenly_core::chatgpt::sign_in(&|u| {
@@ -588,6 +632,13 @@ fn main() -> Result<()> {
         }
         Cmd::Models { download } => {
             for m in stenly_asr::models::MODELS {
+                // An install from an older version is checked once (hashes ~650 MB).
+                if stenly_asr::models::is_present(m, &paths.models_dir) && !stenly_asr::models::is_installed(m, &paths.models_dir) {
+                    eprintln!("checking {}…", m.id);
+                    if let Err(e) = stenly_asr::models::verify_installed(m, &paths.models_dir) {
+                        eprintln!("{}: {e:#}", m.id);
+                    }
+                }
                 let installed = stenly_asr::models::is_installed(m, &paths.models_dir);
                 println!("{} {:<28} ~{} MB  {}", if installed { "✓" } else { " " }, m.id, m.approx_mb, m.description);
             }

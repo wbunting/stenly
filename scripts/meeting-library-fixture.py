@@ -4,6 +4,9 @@
 Usage: scripts/meeting-library-fixture.py /tmp/stenly-library-probe
 Then launch the isolated test app with the printed config/data environment.
 Never point this at a real recording library.
+The generated config uses source = "ics" with no URLs on purpose: EventKit is not
+isolated by STENLY_CONFIG (macOS grants Calendar access per app, not per profile),
+so a screenshot profile must never use source = "eventkit".
 """
 import datetime
 import json

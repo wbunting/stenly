@@ -280,6 +280,11 @@ pub fn upcoming(cfg: &CalendarConfig, from: DateTime<Utc>, to: DateTime<Utc>) ->
             None => errors.push("Kody isn't signed in. Reconnect in Settings → Calendar.".into()),
         }
     }
+    // Google accounts signed in natively are read alongside every other
+    // source (events seen twice, e.g. also through Kody, are deduplicated).
+    let (mut google_events, mut google_errors) = crate::google::upcoming(cfg, from, to);
+    events.append(&mut google_events);
+    errors.append(&mut google_errors);
     for url in cfg.source.uses_ics().then_some(&cfg.ics_urls).into_iter().flatten() {
         match fetch_ics(url) {
             Ok(text) => events.extend(events_from_ics(&text, from, to)),
