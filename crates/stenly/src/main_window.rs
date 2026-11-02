@@ -840,24 +840,26 @@ pub fn default_kody_url() -> String {
     })
 }
 
-/// Source-list row, measured against a native NSOutlineView(.sourceList) on
-/// macOS 26: 24pt rows (+4pt rhythm), 8pt-radius selection, 15pt glyph in the
-/// label colour, 6pt glyph→label gap. The selection lives inside the panel's
-/// own 10pt inset so it never touches the glass edge.
+/// Source-list row, measured against a real Finder sidebar on macOS 26 (light
+/// and dark): 32pt row pitch (30pt row + 2pt gap), 13pt label, 18pt regular
+/// SF Symbol in the label colour inside a 22pt column, 6pt glyph→label gap.
+/// The selection lives inside the panel's own 10pt inset so it never touches
+/// the glass edge. Rows never shrink: a short window scrolls the list instead.
 fn nav_item(id: &'static str, label: &'static str, data: crate::icons::Sym, active: bool) -> gpui::Stateful<gpui::Div> {
     div()
         .id(id)
         .flex()
         .items_center()
         .gap(px(6.))
-        .h(px(28.))
+        .h(px(30.))
+        .flex_shrink_0()
         .px(px(8.))
         .rounded(px(theme::concentric(SIDEBAR_PANEL_RADIUS, SIDEBAR_PAD)))
         .text_size(px(theme::BODY))
         .text_color(theme::text())
         .when(active, |d| d.bg(theme::sidebar_selection()))
         .when(!active, |d| d.hover(|s| s.bg(theme::hover())))
-        .child(div().w(px(18.)).flex().justify_center().child(icon(data, 14., if active { theme::text() } else { theme::muted() })))
+        .child(div().w(px(22.)).flex_shrink_0().flex().justify_center().child(icon(data, 18., theme::text())))
         .child(label)
 }
 
@@ -1702,8 +1704,9 @@ impl MainWindow {
         let item = |id, label, data, p: Page, cx: &mut Context<Self>| {
             nav_item(id, label, data, page == p && !(in_meeting && p != Page::Home)).on_click(cx.listener(move |this, _, _, cx| this.go(p, cx)))
         };
-        // Group header: 11pt semibold tertiary label, aligned to the row text.
-        let section = |t: &'static str| div().pl(px(8.)).pt(px(14.)).pb(px(4.)).text_size(px(theme::SUBHEAD)).font_weight(FontWeight::SEMIBOLD).text_color(theme::faint()).child(t);
+        // Group header (Finder): 11pt semibold secondary label, 24pt from the
+        // panel edge, 16pt of air above.
+        let section = |t: &'static str| div().flex_shrink_0().pl(px(6.)).pt(px(16.)).h(px(32.)).text_size(px(theme::SUBHEAD)).font_weight(FontWeight::SEMIBOLD).text_color(theme::muted()).child(t);
         let glass = glass_enabled();
         div()
             .w(px(SIDEBAR_W))
@@ -1715,33 +1718,47 @@ impl MainWindow {
             .when(!glass, |d| d.bg(theme::sidebar()).border_r_1().border_color(theme::divider()))
             .flex()
             .flex_col()
-            .gap(px(2.))
             // Rows sit 10pt inside the panel (panel itself is 8pt from the edge).
             .px(px(if glass { SIDEBAR_INSET + SIDEBAR_PAD } else { SIDEBAR_PAD }))
             // Below the traffic lights (titlebar band is 52pt).
             .pt(px(60.))
             // Same gap to the panel's bottom edge as to its sides (concentric Trash row).
             .pb(px(if glass { SIDEBAR_INSET + SIDEBAR_PAD } else { SIDEBAR_PAD }))
-            .child(item("nav-home", "Meetings", icons::WAVE, Page::Home, cx))
-            .child(item("nav-history", "Dictations", icons::QUOTE, Page::History, cx))
-            .child(section("Settings"))
-            .child(item("nav-prefs", "General", icons::GEAR, Page::Preferences, cx))
-            .child(item("nav-you", "You", icons::USERS, Page::You, cx))
-            .child(item("nav-cal", "Calendar", icons::CALENDAR, Page::Calendar, cx))
-            .child(item("nav-dictation", "Dictation", icons::KEYBOARD, Page::Dictation, cx))
-            .child(item("nav-mics", "Microphones", icons::MIC, Page::Microphones, cx))
-            .child(item("nav-asr", "Transcription", icons::WAVE, Page::Transcription, cx))
-            .child(item("nav-llm", "Summaries", icons::SPARKLES, Page::Summaries, cx))
-            .child(item("nav-templates", "Templates", icons::FILE_TEXT, Page::Templates, cx))
-            .child(item("nav-recipes", "Recipes", icons::RECIPE, Page::Recipes, cx))
-            .child(item("nav-notes", "Notes & Storage", icons::FOLDER, Page::Notes, cx))
-            .child(item("nav-context", "Context", icons::USERS, Page::Context, cx))
-            .child(item("nav-dest", "Destinations", icons::PAPERPLANE, Page::Destinations, cx))
-            .child(item("nav-perms", "Privacy", icons::SHIELD, Page::Permissions, cx))
-            .child(item("nav-license", "Licence", icons::LOCK, Page::License, cx))
-            // Trash sits at the foot of the sidebar, out of the way (Granola, Finder).
-            .child(div().flex_1())
-            .child(item("nav-trash", "Trash", icons::TRASH, Page::Trash, cx))
+            .child(
+                div()
+                    .id("sidebar-scroll")
+                    .flex_1()
+                    .min_h_0()
+                    .overflow_y_scroll()
+                    .child(
+                        div()
+                            .min_h_full()
+                            .flex()
+                            .flex_col()
+                            .gap(px(2.))
+                            .child(item("nav-home", "Meetings", icons::WAVE, Page::Home, cx))
+                            .child(item("nav-history", "Dictations", icons::QUOTE, Page::History, cx))
+                            .child(section("Settings"))
+                            .child(item("nav-prefs", "General", icons::GEAR, Page::Preferences, cx))
+                            .child(item("nav-you", "You", icons::USERS, Page::You, cx))
+                            .child(item("nav-cal", "Calendar", icons::CALENDAR, Page::Calendar, cx))
+                            .child(item("nav-dictation", "Dictation", icons::KEYBOARD, Page::Dictation, cx))
+                            .child(item("nav-mics", "Microphones", icons::MIC, Page::Microphones, cx))
+                            .child(item("nav-asr", "Transcription", icons::WAVE, Page::Transcription, cx))
+                            .child(item("nav-llm", "Summaries", icons::SPARKLES, Page::Summaries, cx))
+                            .child(item("nav-templates", "Templates", icons::FILE_TEXT, Page::Templates, cx))
+                            .child(item("nav-recipes", "Recipes", icons::RECIPE, Page::Recipes, cx))
+                            .child(item("nav-notes", "Notes & Storage", icons::FOLDER, Page::Notes, cx))
+                            .child(item("nav-context", "Context", icons::USERS, Page::Context, cx))
+                            .child(item("nav-dest", "Destinations", icons::PAPERPLANE, Page::Destinations, cx))
+                            .child(item("nav-perms", "Privacy", icons::SHIELD, Page::Permissions, cx))
+                            .child(item("nav-license", "Licence", icons::LOCK, Page::License, cx))
+                            // Trash sits at the foot of the list: pinned to the bottom when
+                            // there is room, reachable by scrolling when there isn't.
+                            .child(div().flex_1().min_h(px(8.)))
+                            .child(item("nav-trash", "Trash", icons::TRASH, Page::Trash, cx))
+                    ),
+            )
             .into_any_element()
     }
 
@@ -2078,7 +2095,10 @@ impl MainWindow {
         div()
             .flex()
             .flex_col()
-            .child(ui::caption("Who you are"))
+            .child(ui::caption_with_note(
+                "Who you are",
+                "Stenly uses this to recognise your voice and name in meetings, so the transcript and summary credit you with what you said and your action items.",
+            ))
             .child(ui::card(vec![
                 name_row,
                 list_row("Email addresses", "Every address you get invites at, work and personal.", chips("me.emails", &me.emails, &ctrl), self.me_email.clone()),
