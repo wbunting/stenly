@@ -76,6 +76,9 @@ pub enum ControllerEvent {
     /// A new recording was refused because the free trial is used up (or the
     /// licence lapsed). Opens Settings → Licence.
     LicenseBlocked,
+    /// A recording or dictation was refused because the speech model isn't
+    /// set up: open Settings → Transcription.
+    SpeechNotReady,
 }
 
 pub struct Controller {
@@ -93,6 +96,18 @@ pub struct Controller {
     /// Invalidation only: full-library views must not inherit the Recent cap.
     pub library_revision: u64,
     pub last_error: Option<String>,
+    /// A model download that `last_error` is about: the error bar offers Retry for it.
+    pub last_error_retry: Option<String>,
+    /// The last speech-model download that failed (model id, message). Stays
+    /// until that model is installed, whether or not the error bar was dismissed.
+    pub speech_failure: Option<(String, String)>,
+    /// The speech model's files are being checked against their checksums.
+    pub speech_verifying: bool,
+    /// A Summaries screen (Settings or onboarding) has been opened: only then
+    /// is it worth sending a provider's test request on its own.
+    summary_ui_seen: bool,
+    /// The "set up transcription" page was already opened for an automatic start.
+    speech_auto_notified: bool,
     /// Free trial / licence state, cached: reading it shells out to the Keychain.
     pub license: stenly_core::license::Snapshot,
     /// Outcome of the last activate / deactivate / check in Settings → Licence.
@@ -289,6 +304,11 @@ impl Controller {
             recent: vec![],
             library_revision: 0,
             last_error: None,
+            last_error_retry: None,
+            speech_failure: None,
+            speech_verifying: false,
+            summary_ui_seen: false,
+            speech_auto_notified: false,
             license: stenly_core::license::LicenseManager::system().snapshot(Utc::now()),
             license_notice: None,
             license_busy: false,
@@ -343,6 +363,13 @@ impl Controller {
         }
         this.refresh_ollama(cx);
         this.refresh_cli_tools(cx);
+        this.verify_speech_models(cx);
+        // Dev: STENLY_DEV_DOWNLOAD_ASR=1 starts the speech-model download at launch
+        // (with an unwritable `asr.models_dir`, it reproduces a failed download).
+        if std::env::var_os("STENLY_DEV_DOWNLOAD_ASR").is_some() {
+            let id = this.config.asr.model.clone();
+            this.download_asr(id, cx);
+        }
         if this.uses_eventkit() || matches!(this.kody, KodyState::Connected) {
             this.load_calendars(cx);
         }
@@ -714,7 +741,17 @@ impl Controller {
             || config.context.vault_dir != self.config.context.vault_dir
             || config.destinations != self.config.destinations
             || config.context.servers != self.config.context.servers;
+        // A test result belongs to the provider settings it ran with.
+        if config.llm != self.config.llm {
+            self.api_test = ApiTest::Idle;
+            self.cli_test = ApiTest::Idle;
+        }
+        let asr_changed = config.asr.model != self.config.asr.model || config.asr.models_dir != self.config.asr.models_dir;
         self.config = config;
+        if asr_changed {
+            self.verify_speech_models(cx);
+        }
+        self.probe_summaries_if_needed(cx);
         if facts_changed && self.context.facts.is_some() {
             self.refresh_context_facts(cx);
         }
@@ -837,7 +874,8 @@ impl Controller {
     /// Refuse a new recording: the trial is used up and there is no valid
     /// licence. Existing meetings, search, sharing and dictation are untouched.
     fn block_recording(&mut self, automatic: bool, cx: &mut Context<Self>) {
-        let Some(msg) = self.license.blocked_message() else { return };
+        let purchase = stenly_core::readiness::purchase_offered(&self.speech_state());
+        let Some(msg) = self.license.blocked_message_for(purchase) else { return };
         tracing::info!("new recording blocked: free trial finished");
         self.license_notice = Some(LicenseNotice::Blocked(msg));
         // A calendar auto-start has nobody at the keyboard; say it once per
@@ -849,8 +887,35 @@ impl Controller {
         cx.notify();
     }
 
+    /// Refuse a new recording: without the speech model there would be no
+    /// transcript. Say so and open Settings → Transcription, where the fix is.
+    fn block_without_speech(&mut self, speech: &stenly_core::readiness::Speech, automatic: bool, cx: &mut Context<Self>) {
+        use stenly_core::readiness::Speech;
+        tracing::info!(?speech, "new recording blocked: transcription isn't ready");
+        // A calendar auto-start has nobody at the keyboard: say it once per launch.
+        if automatic && self.speech_auto_notified {
+            return;
+        }
+        self.speech_auto_notified = true;
+        let why = match speech {
+            Speech::Downloading => "The speech model is still downloading. Try again when it finishes.",
+            Speech::Verifying => "Stenly is checking the speech model. Try again in a moment.",
+            Speech::Failed(_) => "The speech model didn't download, so Stenly can't transcribe yet. Open Settings → Transcription and press Retry.",
+            _ => "Transcription isn't set up yet. Download the speech model in Settings → Transcription first.",
+        };
+        self.last_error = Some(why.into());
+        self.last_error_retry = None;
+        cx.emit(ControllerEvent::SpeechNotReady);
+        cx.notify();
+    }
+
     fn start_recording_inner(&mut self, event: Option<CalendarEvent>, automatic: bool, cx: &mut Context<Self>) {
         if self.recording.is_some() {
+            return;
+        }
+        let speech = self.speech_state();
+        if !stenly_core::readiness::can_transcribe(&speech) {
+            self.block_without_speech(&speech, automatic, cx);
             return;
         }
         if !self.license.can_record() {
@@ -1395,10 +1460,13 @@ impl Controller {
         }
         let Some(spec) = stenly_asr::models::find(&id) else { return };
         let dir = self.config.paths().models_dir;
+        // A retry clears the old failure; a new one is recorded if it fails again.
+        self.clear_failure(&id);
         self.downloads.push(Download { id: id.clone(), fraction: 0.0, status: "Starting…".into() });
         let (tx, rx) = crossbeam_channel::unbounded::<f32>();
+        // `ensure` fetches the model files and the voice-activity model, each
+        // resumable and checksum-verified, and does nothing for what is already there.
         let work = cx.background_spawn(async move {
-            stenly_asr::models::ensure_vad(&dir)?;
             stenly_asr::models::ensure(spec, &dir, &mut |f| {
                 let _ = tx.send(f);
             })
@@ -1413,10 +1481,74 @@ impl Controller {
         }, cx);
     }
 
+    /// Forget a failure of `id` (a retry started, or it got installed).
+    fn clear_failure(&mut self, id: &str) {
+        if self.speech_failure.as_ref().is_some_and(|(m, _)| m == id) {
+            self.speech_failure = None;
+        }
+        if self.last_error_retry.as_deref() == Some(id) {
+            self.last_error = None;
+            self.last_error_retry = None;
+        }
+    }
+
+    /// Try a failed download again (the error bar's Retry, the banner's Retry).
+    /// Resumes where it stopped.
+    pub fn retry_download(&mut self, id: &str, cx: &mut Context<Self>) {
+        self.clear_failure(id);
+        if stenly_asr::models::find(id).is_some() {
+            self.download_asr(id.to_string(), cx);
+        } else {
+            self.pull_llm(id.to_string(), cx);
+        }
+        cx.notify();
+    }
+
+    /// State of the speech model the app is configured to use.
+    pub fn speech_state(&self) -> stenly_core::readiness::Speech {
+        let id = &self.config.asr.model;
+        let failure = self.speech_failure.as_ref().filter(|(m, _)| m == id).map(|(_, e)| e.as_str());
+        stenly_core::readiness::Speech::from_parts(self.asr_installed(id), self.download(id).is_some(), self.speech_verifying, failure)
+    }
+
+    /// Hash model files that are on disk but were never checked (an install
+    /// from an older version): a few seconds off the UI thread, once. Damaged
+    /// files are removed and reported so Retry fetches clean ones.
+    pub fn verify_speech_models(&mut self, cx: &mut Context<Self>) {
+        if self.speech_verifying {
+            return;
+        }
+        let root = self.config.paths().models_dir;
+        let todo: Vec<&'static stenly_asr::models::ModelSpec> =
+            stenly_asr::models::MODELS.iter().filter(|m| stenly_asr::models::is_present(m, &root) && !stenly_asr::models::is_installed(m, &root)).collect();
+        if todo.is_empty() {
+            return;
+        }
+        self.speech_verifying = true;
+        cx.notify();
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
+            let results = cx
+                .background_spawn(async move { todo.into_iter().map(|m| (m.id, stenly_asr::models::verify_installed(m, &root))).collect::<Vec<_>>() })
+                .await;
+            let _ = this.update(cx, |c, cx| {
+                c.speech_verifying = false;
+                for (id, r) in results {
+                    if let Err(e) = r {
+                        tracing::warn!(model = id, error = %format!("{e:#}"), "speech model failed verification");
+                        c.speech_failure = Some((id.to_string(), format!("{e:#}")));
+                    }
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
     pub fn delete_asr(&mut self, id: &str, cx: &mut Context<Self>) {
         if let Some(spec) = stenly_asr::models::find(id) {
             let _ = stenly_asr::models::remove(spec, &self.config.paths().models_dir);
         }
+        self.clear_failure(id);
         cx.notify();
     }
 
@@ -1444,8 +1576,17 @@ impl Controller {
             let result = futures_race(work, poll).await;
             let _ = this.update(cx, |c, cx| {
                 c.downloads.retain(|d| d.id != id);
-                if let Err(e) = result {
-                    c.last_error = Some(format!("Download of {id} failed: {e:#}"));
+                match result {
+                    Err(e) => {
+                        let detail = format!("{e:#}");
+                        tracing::warn!(model = %id, error = %detail, "download failed");
+                        c.last_error = Some(format!("Download of {id} failed: {detail}"));
+                        c.last_error_retry = Some(id.clone());
+                        if stenly_asr::models::find(&id).is_some() {
+                            c.speech_failure = Some((id.clone(), detail));
+                        }
+                    }
+                    Ok(()) => c.clear_failure(&id),
                 }
                 c.refresh_ollama(cx);
                 cx.notify();
@@ -1609,6 +1750,88 @@ impl Controller {
         self.audio.input_devices()
     }
 
+    // ---- summary readiness
+    /// What is known about the chosen summary provider (see `stenly_core::readiness`).
+    pub fn summary_facts(&self) -> stenly_core::readiness::SummaryFacts {
+        use stenly_core::cli_llm::Tool;
+        use stenly_core::readiness::{Probe, SummaryFacts, SummaryProvider};
+        let llm = &self.config.llm;
+        let provider = if llm.uses_chatgpt() {
+            SummaryProvider::ChatGpt
+        } else if llm.uses_cli() {
+            match Tool::parse(&llm.cli.tool).or_else(|| self.cli_tools.first().map(|d| d.tool)) {
+                Some(Tool::Claude) => SummaryProvider::Claude,
+                _ => SummaryProvider::Codex,
+            }
+        } else if llm.uses_api() {
+            SummaryProvider::Api
+        } else {
+            SummaryProvider::Ollama
+        };
+        let probe_of = |t: &ApiTest| match t {
+            ApiTest::Idle => Probe::Untested,
+            ApiTest::Running => Probe::Running,
+            ApiTest::Ok(_) => Probe::Ok,
+            ApiTest::Failed(e) => Probe::Failed(e.clone()),
+        };
+        let api = &llm.api;
+        let local_endpoint = ["localhost", "127.0.0.1", "[::1]"].iter().any(|h| api.endpoint.contains(h));
+        let tool = match provider {
+            SummaryProvider::Claude => Some(Tool::Claude),
+            SummaryProvider::Codex => Some(Tool::Codex),
+            _ => None,
+        };
+        SummaryFacts {
+            enabled: llm.enabled,
+            provider,
+            ollama_checked: self.ollama.checked,
+            ollama_running: self.ollama.running,
+            ollama_model_installed: self.llm_installed(&llm.model),
+            ollama_model: llm.model.clone(),
+            api_configured: !api.endpoint.trim().is_empty() && !api.model.trim().is_empty(),
+            api_can_authenticate: self.api_key_saved
+                || !api.api_key.trim().is_empty()
+                || (!api.api_key_env.is_empty() && std::env::var(&api.api_key_env).is_ok_and(|v| !v.is_empty()))
+                || local_endpoint,
+            cli_found: tool.is_some_and(|t| self.cli_tool(t).is_some()),
+            chatgpt_signed_in: matches!(self.chatgpt, ChatGptState::SignedIn(_)),
+            probe: match provider {
+                SummaryProvider::Codex | SummaryProvider::Claude => probe_of(&self.cli_test),
+                _ => probe_of(&self.api_test),
+            },
+        }
+    }
+
+    pub fn summary_status(&self) -> stenly_core::readiness::Summaries {
+        stenly_core::readiness::summaries(&self.summary_facts())
+    }
+
+    /// A Summaries screen is on: from now on, check the chosen provider by
+    /// itself when its settings change (and once now).
+    pub fn watch_summaries(&mut self, cx: &mut Context<Self>) {
+        self.summary_ui_seen = true;
+        self.probe_summaries_if_needed(cx);
+    }
+
+    /// Send the chosen provider's test request when it can succeed and hasn't
+    /// run for these settings. Only after a Summaries screen has been opened,
+    /// so launching the app never spends a request.
+    fn probe_summaries_if_needed(&mut self, cx: &mut Context<Self>) {
+        use stenly_core::readiness::SummaryProvider;
+        if !self.summary_ui_seen {
+            return;
+        }
+        let f = self.summary_facts();
+        if !stenly_core::readiness::should_auto_probe(&f) {
+            return;
+        }
+        match f.provider {
+            SummaryProvider::Api => self.test_api(cx),
+            SummaryProvider::Codex | SummaryProvider::Claude => self.test_cli(cx),
+            SummaryProvider::Ollama | SummaryProvider::ChatGpt => {}
+        }
+    }
+
     // ---- hosted summary API
     /// Store (or with "" remove) the API key in the Keychain.
     pub fn set_api_key(&mut self, key: &str, cx: &mut Context<Self>) {
@@ -1649,6 +1872,7 @@ impl Controller {
             let _ = this.update(cx, |c, cx| {
                 c.cli_tools = found;
                 c.cli_checked = true;
+                c.probe_summaries_if_needed(cx);
                 cx.notify();
             });
         })

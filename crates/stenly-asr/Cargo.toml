@@ -11,6 +11,7 @@ anyhow.workspace = true
 tracing.workspace = true
 sherpa-onnx.workspace = true
 ureq.workspace = true
+sha2 = "0.10"
 crossbeam-channel.workspace = true
 serde_json.workspace = true
 serde.workspace = true

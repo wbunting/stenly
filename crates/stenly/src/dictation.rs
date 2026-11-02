@@ -136,13 +136,17 @@ impl DictationController {
         };
         // Apply the model policy independently of shortcuts: changing an ASR
         // model or the memory setting must not be skipped by the early return.
-        let model_settings = (d.enabled, d.model_idle_secs, format!("{}|{}|{}|{}", cfg.asr.model, cfg.asr.provider, cfg.asr.threads, cfg.paths().models_dir.display()));
+        let model_installed = stenly_asr::models::find(&cfg.asr.model).is_some_and(|m| stenly_asr::models::is_installed(m, &cfg.paths().models_dir));
+        let model_settings = (d.enabled, d.model_idle_secs, format!("{}|{}|{}|{}|{}", cfg.asr.model, cfg.asr.provider, cfg.asr.threads, cfg.paths().models_dir.display(), model_installed));
         if self.model_settings.as_ref() != Some(&model_settings) {
             self.model_settings = Some(model_settings);
             stenly_asr::DICTATION_ASR.set_idle_timeout(if !d.enabled { Some(Duration::ZERO) } else { (d.model_idle_secs > 0).then(|| Duration::from_secs(d.model_idle_secs)) });
             let asr = cfg.asr.clone();
             let models = cfg.paths().models_dir;
-            let preload = d.enabled && d.model_idle_secs == 0;
+            // Never start a download from here: the speech model is fetched by
+            // Settings → Transcription / onboarding (where it can be retried and
+            // its failure shown), not as a side effect of preloading.
+            let preload = d.enabled && d.model_idle_secs == 0 && stenly_asr::models::find(&asr.model).is_some_and(|m| stenly_asr::models::is_installed(m, &models));
             cx.background_spawn(async move {
                 if preload {
                     if let Err(e) = stenly_asr::DICTATION_ASR.get(&asr, &models) {
@@ -292,6 +296,12 @@ impl DictationController {
             self.notice("An update is being installed. Try dictation again after it finishes.".into(), cx);
             return;
         };
+        let speech = self.controller.read(cx).speech_state();
+        if !stenly_core::readiness::can_transcribe(&speech) {
+            drop(activity);
+            self.notice("Transcription isn't set up. Open Settings → Transcription.".into(), cx);
+            return;
+        }
         self.update_activity = Some(activity);
         let cfg = self.config(cx);
         let samples = Arc::new(std::sync::Mutex::new(Vec::<f32>::with_capacity(16_000 * 30)));

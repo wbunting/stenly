@@ -146,6 +146,12 @@ pub fn open(controller: Entity<Controller>, cx: &mut App) -> Option<WindowHandle
                     .detach();
                     // Dev: STENLY_ONBOARDING=<step index> jumps straight to a step.
                     let step = std::env::var("STENLY_ONBOARDING").ok().and_then(|v| v.parse::<usize>().ok()).and_then(|i| STEPS.get(i).copied()).unwrap_or(Step::Welcome);
+                    if step == Step::Models {
+                        controller.update(cx, |c, cx| {
+                            c.verify_speech_models(cx);
+                            c.watch_summaries(cx);
+                        });
+                    }
                     Onboarding { controller, step, kody_url, api_endpoint, api_model, api_key, _subs: subs }
                 })
             },
@@ -160,7 +166,11 @@ impl Onboarding {
         let i = STEPS.iter().position(|s| *s == self.step).unwrap_or(0);
         self.step = STEPS[(i + 1).min(STEPS.len() - 1)];
         if self.step == Step::Models {
-            self.controller.update(cx, |c, cx| c.refresh_ollama(cx));
+            self.controller.update(cx, |c, cx| {
+                c.refresh_ollama(cx);
+                c.verify_speech_models(cx);
+                c.watch_summaries(cx);
+            });
         }
         cx.notify();
     }
@@ -414,14 +424,27 @@ impl Onboarding {
             .into_any_element()
     }
 
+    fn summary_chip(status: &stenly_core::readiness::Summaries) -> AnyElement {
+        use stenly_core::readiness::Summaries;
+        match status {
+            Summaries::Ready => ui::chip("Ready", Some(icons::CHECK), theme::green()).into_any_element(),
+            Summaries::Checking => ui::pending("ob-summary-checking", "Checking…").into_any_element(),
+            Summaries::NotReady(_) => ui::chip("Not ready", Some(icons::ALERT), theme::amber()).into_any_element(),
+            Summaries::Off => div().into_any_element(),
+        }
+    }
+
     fn models(&self, cx: &mut Context<Self>) -> AnyElement {
-        let (cfg, asr_ok, asr_dl, ollama, api_key_saved, api_test, llm_ok, llm_dl) = {
+        let (cfg, speech, asr_dl, ollama, api_key_saved, api_test, llm_ok, llm_dl, summary) = {
             let c = self.controller.read(cx);
             let cfg = c.config.clone();
             let asr = stenly_asr::models::find(&cfg.asr.model).unwrap_or(&stenly_asr::models::MODELS[0]);
             let llm = stenly_core::ollama::find(&cfg.llm.model).copied().unwrap_or(stenly_core::ollama::CATALOG[0]);
-            (cfg, c.asr_installed(asr.id), c.download(asr.id).cloned(), c.ollama.clone(), c.api_key_saved, c.api_test.clone(), c.llm_installed(llm.id), c.download(llm.id).cloned())
+            (cfg, c.speech_state(), c.download(asr.id).cloned(), c.ollama.clone(), c.api_key_saved, c.api_test.clone(), c.llm_installed(llm.id), c.download(llm.id).cloned(), c.summary_status())
         };
+        use stenly_core::readiness::Summaries;
+        // "Ready" only when the model's files are on disk and verified.
+        let asr_ok = speech.is_ready();
         let asr = stenly_asr::models::find(&cfg.asr.model).unwrap_or(&stenly_asr::models::MODELS[0]);
         let uses_api = cfg.llm.uses_api();
         let uses_cli = cfg.llm.uses_cli();
@@ -434,10 +457,36 @@ impl Onboarding {
             div().flex().flex_col().items_end().gap(px(6.)).child(div().text_size(px(12.)).text_color(theme::muted()).child(format!("{:.0}%", d.fraction.max(0.0) * 100.0))).child(ui::progress_bar(d.fraction, 120.)).into_any_element()
         } else if asr_ok {
             ui::chip("Ready", Some(icons::CHECK), theme::green()).into_any_element()
+        } else if speech == stenly_core::readiness::Speech::Verifying {
+            ui::pending("ob-asr-verify", "Checking…").into_any_element()
+        } else if matches!(speech, stenly_core::readiness::Speech::Failed(_)) {
+            let id = asr.id.to_string();
+            let ctrl = ctrl.clone();
+            ui::button_icon("ob-asr", "Retry", Btn::Primary, icons::DOWNLOAD).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.retry_download(&id, cx))).into_any_element()
         } else {
             let id = asr.id.to_string();
             let ctrl = ctrl.clone();
             ui::button_icon("ob-asr", "Download", Btn::Primary, icons::DOWNLOAD).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.download_asr(id.clone(), cx))).into_any_element()
+        };
+        // What went wrong, right under the row, until it is fixed.
+        let asr_note: Option<AnyElement> = match &speech {
+            stenly_core::readiness::Speech::Failed(e) => Some(
+                div().flex().items_start().gap(px(6.)).px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).line_height(px(17.)).text_color(theme::muted())
+                    .child(div().pt(px(3.)).child(icon(icons::ALERT, 11., theme::amber())))
+                    .child(div().flex_1().min_w_0().child(format!("The speech model didn't download: {e}. Press Retry; it continues where it stopped. Stenly can't transcribe until this is done.")))
+                    .into_any_element(),
+            ),
+            stenly_core::readiness::Speech::Missing => Some(
+                div().flex().items_start().gap(px(6.)).px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).line_height(px(17.)).text_color(theme::muted())
+                    .child(div().pt(px(3.)).child(icon(icons::ALERT, 11., theme::amber())))
+                    .child(div().flex_1().min_w_0().child("Transcription isn't ready yet. Download the speech model to record meetings or dictate."))
+                    .into_any_element(),
+            ),
+            _ => None,
+        };
+        // A real ✓ Ready for the chosen summary provider (never for one that isn't chosen).
+        let ready = |selected: bool, button: AnyElement| -> AnyElement {
+            div().flex().items_center().gap(px(10.)).when(selected, |d| d.child(Self::summary_chip(&summary))).child(button).into_any_element()
         };
         let llm = stenly_core::ollama::find(&cfg.llm.model).copied().unwrap_or(stenly_core::ollama::CATALOG[0]);
         let local_detail = if ollama.running && llm_ok {
@@ -447,6 +496,7 @@ impl Onboarding {
         } else {
             div().text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child("No setup needed to record: Stenly will save a transcript note. Add Ollama later for local summaries.").into_any_element()
         };
+        let local_selected = !(uses_api || uses_cli || uses_chatgpt);
         let local_action: AnyElement = if let Some(d) = llm_dl {
             div().flex().flex_col().items_end().gap(px(6.)).child(div().text_size(px(12.)).text_color(theme::muted()).child(format!("{:.0}%", d.fraction.max(0.0) * 100.0))).child(ui::progress_bar(d.fraction, 120.)).into_any_element()
         } else if ollama.running && llm_ok {
@@ -462,8 +512,9 @@ impl Onboarding {
         let select_local = {
             let ctrl = ctrl.clone();
             let other = uses_api || uses_cli || uses_chatgpt;
-            ui::button("ob-use-local", if other { "Use Local" } else { "Selected" }, if other { Btn::Outline } else { Btn::Ghost })
+            ready(local_selected, ui::button("ob-use-local", if other { "Use Local" } else { "Selected" }, if other { Btn::Outline } else { Btn::Ghost })
                 .when(other, |b| b.on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.set("llm.provider", "ollama", cx))))
+                .into_any_element())
         };
         // Sign in with ChatGPT: signing in also selects it
         let select_chatgpt: AnyElement = {
@@ -471,7 +522,7 @@ impl Onboarding {
             let ctrl = ctrl.clone();
             match &chatgpt {
                 ChatGptState::SigningIn => ui::pending("ob-chatgpt-wait", "Waiting for browser…").into_any_element(),
-                ChatGptState::SignedIn(_) if uses_chatgpt => ui::button("ob-use-chatgpt", "Selected", Btn::Ghost).into_any_element(),
+                ChatGptState::SignedIn(_) if uses_chatgpt => ready(true, ui::button("ob-use-chatgpt", "Selected", Btn::Ghost).into_any_element()),
                 ChatGptState::SignedIn(_) => ui::button("ob-use-chatgpt", "Use ChatGPT", Btn::Outline).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.set("llm.provider", "chatgpt", cx))).into_any_element(),
                 _ => ui::button("ob-use-chatgpt", "Sign In", Btn::Outline).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.sign_in_chatgpt(cx))).into_any_element(),
             }
@@ -483,8 +534,9 @@ impl Onboarding {
         };
         let select_api = {
             let ctrl = ctrl.clone();
-            ui::button("ob-use-api", if uses_api { "Selected" } else { "Use Cloud" }, if uses_api { Btn::Ghost } else { Btn::Outline })
+            ready(uses_api, ui::button("ob-use-api", if uses_api { "Selected" } else { "Use Cloud" }, if uses_api { Btn::Ghost } else { Btn::Outline })
                 .when(!uses_api, |b| b.on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.set("llm.provider", "api", cx))))
+                .into_any_element())
         };
         // Codex / Claude Code, when installed: their own sign-in pays, Stenly holds no token.
         let cli_rows: Vec<AnyElement> = cli_tools
@@ -502,8 +554,9 @@ impl Onboarding {
                     Some(icons::CODE),
                     format!("{} · {}", tool.label(), tool.vendor()),
                     Some("Already installed here. Uses the account it is signed in to.".into()),
-                    ui::button(id, label, if selected { Btn::Ghost } else { Btn::Outline })
-                        .when(!selected, |b| b.on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.use_cli_tool(tool, cx)))),
+                    ready(selected, ui::button(id, label, if selected { Btn::Ghost } else { Btn::Outline })
+                        .when(!selected, |b| b.on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.use_cli_tool(tool, cx))))
+                        .into_any_element()),
                 )
                 .into_any_element()
             })
@@ -553,6 +606,7 @@ impl Onboarding {
         div().flex_1().flex().flex_col()
             .child(Self::header("Notes, with or without AI", "Transcription runs on this Mac. Your first meeting always becomes a Markdown note with attendees and a transcript."))
             .child(ui::card(vec![ui::row(Some(icons::WAVE), format!("{} · transcription", asr.name), Some(format!("NVIDIA · {} · {} MB", asr.language, asr.approx_mb).into()), asr_status).into_any_element()]))
+            .when_some(asr_note, |d, n| d.child(n))
             .child(ui::caption("Summaries (optional)"))
             .child(ui::card(vec![
                 ui::row(Some(icons::SPARKLES), "Local · Ollama", Some("Summaries stay on this Mac.".into()), select_local).into_any_element(),
@@ -560,6 +614,11 @@ impl Onboarding {
                 ui::row(Some(icons::LOCK), "Cloud · Sign in with ChatGPT", Some(chatgpt_desc), select_chatgpt).into_any_element(),
                 ui::row(Some(icons::LOCK), "Cloud · your API key", Some("Use an OpenAI-compatible provider.".into()), select_api).into_any_element(),
             ].into_iter().chain(cli_rows).collect()))
+            .when_some(match &summary { Summaries::NotReady(why) if !local_selected => Some(why.clone()), _ => None }, |d, why| {
+                d.child(div().flex().items_start().gap(px(6.)).px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).line_height(px(17.)).text_color(theme::muted())
+                    .child(div().pt(px(3.)).child(icon(icons::ALERT, 11., theme::amber())))
+                    .child(div().flex_1().min_w_0().child(why)))
+            })
             .when_some(chosen_cli.filter(|_| uses_cli), |d, tool| d.child(div().px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).line_height(px(17.)).text_color(theme::muted()).child(tool.disclosure())))
             .when(uses_chatgpt, |d| d.child(div().px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).line_height(px(17.)).text_color(theme::muted()).child("Your transcript is sent to OpenAI under your ChatGPT account to write the summary.")))
             .when(uses_api, |d| d.child(div().px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).line_height(px(17.)).text_color(theme::muted()).child("Your transcript is sent to this provider to write the summary.")).child(api_form))
@@ -656,6 +715,13 @@ impl Onboarding {
                     .line_height(px(18.))
                     .text_color(theme::muted())
                     .when_some(key.filter(|_| c.config.dictation.enabled), |d, k| d.child(format!("To dictate anywhere, tap {k}, talk, and tap it again. Or hold it while you speak.")))
+            })
+            .when(!c.speech_state().is_ready(), |d| {
+                d.child(
+                    div().w(px(420.)).pt(px(8.)).flex().items_start().justify_center().gap(px(6.)).text_size(px(theme::BODY)).line_height(px(18.)).text_color(theme::text())
+                        .child(div().pt(px(3.)).child(icon(icons::ALERT, 12., theme::amber())))
+                        .child(div().child("Transcription isn't ready yet. Finish it in Settings → Transcription before your first meeting.")),
+                )
             })
             .when_some(next, |d, n| d.child(div().pt(px(4.)).text_size(px(theme::BODY)).font_weight(FontWeight::MEDIUM).text_color(theme::text()).child(n)))
             .child(div().pt(px(14.)).child(ui::button("finish", "Open Stenly", Btn::Primary).on_click(cx.listener(|this, _, window, cx| this.finish(window, cx)))))

@@ -588,6 +588,13 @@ fn main() -> Result<()> {
         }
         Cmd::Models { download } => {
             for m in stenly_asr::models::MODELS {
+                // An install from an older version is checked once (hashes ~650 MB).
+                if stenly_asr::models::is_present(m, &paths.models_dir) && !stenly_asr::models::is_installed(m, &paths.models_dir) {
+                    eprintln!("checking {}…", m.id);
+                    if let Err(e) = stenly_asr::models::verify_installed(m, &paths.models_dir) {
+                        eprintln!("{}: {e:#}", m.id);
+                    }
+                }
                 let installed = stenly_asr::models::is_installed(m, &paths.models_dir);
                 println!("{} {:<28} ~{} MB  {}", if installed { "✓" } else { " " }, m.id, m.approx_mb, m.description);
             }

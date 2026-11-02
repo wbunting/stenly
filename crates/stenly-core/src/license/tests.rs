@@ -151,6 +151,25 @@ fn recording_is_blocked_only_after_the_last_free_meeting() {
 }
 
 #[test]
+fn trial_ended_message_does_not_point_at_buying_until_transcription_works() {
+    let dir = tempfile::tempdir().unwrap();
+    let (m, _) = manager(dir.path(), true);
+    for i in 0..10 {
+        m.record_meeting(&format!("s{i}"), 300);
+    }
+    let s = m.snapshot(t0());
+    let early = s.blocked_message_for(false).unwrap();
+    assert!(early.contains("Finish setting up transcription first"), "{early}");
+    assert!(!early.contains("Buy"), "{early}");
+    let ready = s.blocked_message_for(true).unwrap();
+    assert!(ready.contains("Buy a licence"), "{ready}");
+    assert_eq!(s.blocked_message(), Some(ready));
+    // still trial: nothing to say either way
+    let (m2, _) = manager(tempfile::tempdir().unwrap().path(), true);
+    assert!(m2.snapshot(t0()).blocked_message_for(false).is_none());
+}
+
+#[test]
 fn source_builds_never_gate() {
     let dir = tempfile::tempdir().unwrap();
     let (m, _) = manager(dir.path(), false);
