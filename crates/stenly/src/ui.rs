@@ -28,6 +28,21 @@ pub fn caption(text: impl Into<SharedString>) -> Div {
     div().pl(px(16.)).pb(px(6.)).pt(px(24.)).text_size(px(theme::BODY)).font_weight(FontWeight::SEMIBOLD).text_color(theme::text()).child(text.into())
 }
 
+/// A section heading with a one-line explanation under it (12pt secondary),
+/// for sections that ask the user for something and should say why.
+pub fn caption_with_note(text: impl Into<SharedString>, note: impl Into<SharedString>) -> Div {
+    div()
+        .flex()
+        .flex_col()
+        .gap(px(2.))
+        .pl(px(16.))
+        .pr(px(16.))
+        .pb(px(8.))
+        .pt(px(24.))
+        .child(div().text_size(px(theme::BODY)).font_weight(FontWeight::SEMIBOLD).text_color(theme::text()).child(text.into()))
+        .child(div().text_size(px(theme::CALLOUT)).line_height(px(16.)).text_color(theme::muted()).child(note.into()))
+}
+
 /// Grouped form box (same grammar as the Home lists): 12pt corners, 4pt
 /// inner padding, rows carry their own 12pt horizontal padding, hairlines
 /// inset to the text column.
