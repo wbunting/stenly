@@ -57,6 +57,24 @@ pub enum KodyState {
     Failed(String),
 }
 
+/// Native Google Calendar sign-in (Settings → Calendar, onboarding).
+#[derive(Clone, Debug, Default)]
+pub struct GoogleState {
+    /// Emails of the accounts signed in on this profile.
+    pub accounts: Vec<String>,
+    /// A browser sign-in is open.
+    pub signing_in: bool,
+    /// Why the last sign-in failed.
+    pub error: Option<String>,
+    /// Calendars of every signed-in account, keyed `account|calendar id`.
+    pub calendars: Vec<CalendarInfo>,
+    /// Result of the last calendar-list request (None = not asked yet).
+    pub status: Option<Result<(), String>>,
+    /// Accounts whose stored sign-in no longer works.
+    pub needs_signin: Vec<String>,
+    loading: bool,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct OllamaState {
     pub running: bool,
@@ -126,6 +144,9 @@ pub struct Controller {
     pub ollama: OllamaState,
     pub kody: KodyState,
     pub calendars: Vec<CalendarInfo>,
+    pub google: GoogleState,
+    /// Set to abandon a Google sign-in that's waiting for the browser.
+    google_cancel: Arc<std::sync::atomic::AtomicBool>,
     calendar_source: Option<Arc<dyn CalendarSource>>,
     /// None = not loaded yet; Some(Err) = last attempt failed.
     pub calendars_status: Option<Result<(), String>>,
@@ -313,6 +334,8 @@ impl Controller {
             ollama: OllamaState::default(),
             kody: if stenly_core::kody::KodyAuth::load().is_some() { KodyState::Connected } else { KodyState::Disconnected },
             calendars: vec![],
+            google: GoogleState { accounts: stenly_core::google::signed_in_accounts(), ..Default::default() },
+            google_cancel: Arc::default(),
             calendar_source,
             calendars_status: None,
             calendars_loading: false,
@@ -345,6 +368,21 @@ impl Controller {
         this.refresh_cli_tools(cx);
         if this.uses_eventkit() || matches!(this.kody, KodyState::Connected) {
             this.load_calendars(cx);
+        }
+        if !this.google.accounts.is_empty() {
+            this.load_google_calendars(cx);
+        }
+        // Dev: STENLY_TEST_GOOGLE=<n> signs in n times at launch. Only against the
+        // loopback mock (STENLY_GOOGLE_MOCK + STENLY_GOOGLE_MOCK_AUTO), never Google.
+        if let Some(n) = std::env::var("STENLY_TEST_GOOGLE").ok().and_then(|v| v.parse::<u32>().ok()).filter(|_| std::env::var_os("STENLY_GOOGLE_MOCK_AUTO").is_some() && stenly_core::google::Endpoints::from_env().mock) {
+            cx.spawn(async move |this, cx: &mut AsyncApp| {
+                for _ in 0..n {
+                    cx.background_executor().timer(Duration::from_secs(2)).await;
+                    let _ = this.update(cx, |c, cx| c.sign_in_google(cx));
+                    cx.background_executor().timer(Duration::from_secs(4)).await;
+                }
+            })
+            .detach();
         }
         this.start_loops(cx);
         // Recover anything left over from a crash / quit mid-processing, and
@@ -441,7 +479,7 @@ impl Controller {
                 let failed = !errors.is_empty();
                 // Errors that mean "couldn't reach the source at all"; per-calendar
                 // problems (one 404'd calendar) still count as a completed sync.
-                let unreachable = errors.iter().any(|e| e.starts_with("Google Calendar (via Kody)") || e.contains("isn't signed in"));
+                let unreachable = errors.iter().any(|e| e.starts_with("Google Calendar (via Kody)") || e.contains("isn't signed in") || stenly_core::google::is_unreachable(e));
                 if this
                     .update(cx, |c, cx| {
                         // A failed fetch shouldn't wipe out the meetings we already know about.
@@ -1912,6 +1950,142 @@ impl Controller {
             });
         })
         .detach();
+    }
+
+    // ---- Sign in with Google (native)
+    /// Whether this build carries a Google OAuth client; the sign-in buttons are hidden otherwise.
+    pub fn google_available(&self) -> bool {
+        stenly_core::google::configured()
+    }
+
+    /// Open the browser to sign in to a Google account (a second call adds another account).
+    pub fn sign_in_google(&mut self, cx: &mut Context<Self>) {
+        if self.google.signing_in {
+            return;
+        }
+        self.google.signing_in = true;
+        self.google.error = None;
+        let cancel = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        self.google_cancel = cancel.clone();
+        cx.notify();
+        let (url_tx, url_rx) = crossbeam_channel::bounded::<String>(1);
+        let work = cx.background_spawn(async move {
+            let client = stenly_core::google::Client::system();
+            let email = client.sign_in(&|u| { let _ = url_tx.send(u.to_string()); }, &|| cancel.load(std::sync::atomic::Ordering::Relaxed))?;
+            // Fetch the calendar list here, off the main thread, so the first
+            // selection (the account's primary calendar) lands with the sign-in.
+            let (calendars, errors) = client.list_calendars();
+            anyhow::Ok((email, calendars, errors))
+        });
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
+            let opener = async {
+                loop {
+                    cx.background_executor().timer(Duration::from_millis(100)).await;
+                    if let Ok(u) = url_rx.try_recv() {
+                        let _ = cx.update(|cx| cx.open_url(&u));
+                    }
+                }
+            };
+            let result = futures_race(work, opener).await;
+            let _ = this.update(cx, |c, cx| {
+                c.google.signing_in = false;
+                match result {
+                    Ok((email, calendars, errors)) => {
+                        c.google.accounts = stenly_core::google::signed_in_accounts();
+                        c.apply_google_calendars(calendars, errors);
+                        // Watch the new account's primary calendar, keeping the other accounts' choices.
+                        let mut ids = c.config.calendar.google_calendar_ids.clone();
+                        if ids.is_empty() {
+                            // Empty meant "each account's primary": keep that for the accounts already there.
+                            ids = c.google.calendars.iter().filter(|x| x.primary).map(|x| x.id.clone()).collect();
+                        }
+                        for k in stenly_core::google::default_selection(&c.google.calendars, &email) {
+                            if !ids.contains(&k) {
+                                ids.push(k);
+                            }
+                        }
+                        c.set_list("calendar.google_calendar_ids", &ids, cx);
+                        c.refresh_calendar(cx);
+                        cx.activate(true);
+                    }
+                    Err(e) if format!("{e}").contains("cancelled") && !format!("{e}").contains("Sign-in was cancelled") => {}
+                    Err(e) => c.google.error = Some(format!("{e:#}")),
+                }
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn cancel_google_sign_in(&mut self, cx: &mut Context<Self>) {
+        self.google_cancel.store(true, std::sync::atomic::Ordering::Relaxed);
+        self.google.signing_in = false;
+        cx.notify();
+    }
+
+    /// Forget one Google account (and revoke Stenly's access at Google).
+    pub fn sign_out_google(&mut self, email: &str, cx: &mut Context<Self>) {
+        let email = email.to_string();
+        let e2 = email.clone();
+        let work = cx.background_spawn(async move { stenly_core::google::Client::system().sign_out(&e2) });
+        self.google.accounts.retain(|a| !a.eq_ignore_ascii_case(&email));
+        self.google.calendars.retain(|c| c.account.as_deref().is_none_or(|a| !a.eq_ignore_ascii_case(&email)));
+        self.google.needs_signin.retain(|a| !a.eq_ignore_ascii_case(&email));
+        let ids: Vec<String> = self.config.calendar.google_calendar_ids.iter().filter(|k| stenly_core::google::split_key(k).is_none_or(|(a, _)| !a.eq_ignore_ascii_case(&email))).cloned().collect();
+        self.set_list("calendar.google_calendar_ids", &ids, cx);
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
+            work.await;
+            let _ = this.update(cx, |c, cx| c.refresh_calendar(cx));
+        })
+        .detach();
+        cx.notify();
+    }
+
+    fn apply_google_calendars(&mut self, calendars: Vec<CalendarInfo>, errors: Vec<String>) {
+        self.google.needs_signin = self.google.accounts.iter().filter(|a| errors.iter().any(|e| stenly_core::google::is_reauth(e) && e.contains(a.as_str()))).cloned().collect();
+        self.google.status = Some(match errors.first() {
+            Some(e) if calendars.is_empty() => Err(e.clone()),
+            _ => Ok(()),
+        });
+        // A failed account keeps the rows we already know about.
+        if !calendars.is_empty() || errors.is_empty() {
+            self.google.calendars = calendars;
+        }
+    }
+
+    pub fn load_google_calendars(&mut self, cx: &mut Context<Self>) {
+        if self.google.loading || self.google.accounts.is_empty() {
+            return;
+        }
+        self.google.loading = true;
+        cx.spawn(async move |this, cx: &mut AsyncApp| {
+            let (calendars, errors) = cx.background_spawn(async move { stenly_core::google::Client::system().list_calendars() }).await;
+            let _ = this.update(cx, |c, cx| {
+                c.google.loading = false;
+                c.google.accounts = stenly_core::google::signed_in_accounts();
+                c.apply_google_calendars(calendars, errors);
+                cx.notify();
+            });
+        })
+        .detach();
+    }
+
+    pub fn toggle_google_calendar(&mut self, key: &str, cx: &mut Context<Self>) {
+        let mut ids = self.config.calendar.google_calendar_ids.clone();
+        // Empty means "each account's primary". Make that explicit before the first edit.
+        if ids.is_empty() {
+            ids = self.google.calendars.iter().filter(|c| c.primary).map(|c| c.id.clone()).collect();
+        }
+        if let Some(i) = ids.iter().position(|x| x == key) {
+            // Never toggle the last one off: an empty list would mean "primary" again.
+            if ids.len() == 1 {
+                return;
+            }
+            ids.remove(i);
+        } else {
+            ids.push(key.to_string());
+        }
+        self.set_list("calendar.google_calendar_ids", &ids, cx);
     }
 
     pub fn toggle_calendar(&mut self, id: &str, cx: &mut Context<Self>) {

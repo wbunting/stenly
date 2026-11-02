@@ -12,6 +12,10 @@ cargo run -p stenly --release
 cargo run -p stenly-cli -- config
 cargo run -p stenly-cli -- upcoming
 
+# Google Calendar without Calendar.app (see docs/google-calendar.md)
+cargo run -p stenly-cli -- google-login
+cargo run -p stenly-cli -- google-calendars
+
 # Record a short local test session, then process a session
 cargo run -p stenly-cli -- record --title "Meeting" --secs 30
 cargo run -p stenly-cli -- process <session-directory>

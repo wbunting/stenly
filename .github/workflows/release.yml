@@ -66,6 +66,11 @@ jobs:
           STENLY_ENFORCE_LICENSE: ${{ vars.STENLY_POLAR_ORG_ID != '' && vars.STENLY_CHECKOUT_URL != '' && '1' || '0' }}
           STENLY_CHECKOUT_URL: ${{ vars.STENLY_CHECKOUT_URL }}
           STENLY_POLAR_ORG_ID: ${{ vars.STENLY_POLAR_ORG_ID }}
+          # "Sign in with Google": the Desktop-app OAuth client (docs/google-calendar.md).
+          # A desktop client's secret is not confidential, but it stays out of
+          # the repository. Unset = the sign-in buttons are hidden.
+          STENLY_GOOGLE_CLIENT_ID: ${{ vars.STENLY_GOOGLE_CLIENT_ID }}
+          STENLY_GOOGLE_CLIENT_SECRET: ${{ secrets.STENLY_GOOGLE_CLIENT_SECRET }}
           # CI must never silently fall back to the script's contributor-safe
           # ad-hoc development mode.
           STENLY_REQUIRE_DEVELOPER_ID: "1"

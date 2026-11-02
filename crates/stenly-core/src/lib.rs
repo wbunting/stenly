@@ -15,6 +15,7 @@ pub mod daemon;
 pub mod destinations;
 pub mod dictation;
 pub mod ics;
+pub mod google;
 pub mod identity;
 pub mod kody;
 pub mod library;

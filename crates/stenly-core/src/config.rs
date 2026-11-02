@@ -563,8 +563,11 @@ pub struct CalendarConfig {
     pub kody_url: String,
     /// Name of the Kody OAuth integration to read calendars with.
     pub kody_integration: String,
-    /// Google calendar ids to watch. Empty = your primary calendar.
+    /// Calendar ids to watch from EventKit or Kody. Empty = your primary calendar.
     pub calendar_ids: Vec<String>,
+    /// Google calendars to watch, as `account|calendar id` (Sign in with
+    /// Google). Empty = each signed-in account's primary calendar.
+    pub google_calendar_ids: Vec<String>,
     /// Extra ICS feeds (Google "Secret address in iCal format", or any ICS URL/file).
     pub ics_urls: Vec<String>,
     /// Seconds before start to show the "record?" prompt.
@@ -667,6 +670,7 @@ impl Default for CalendarConfig {
             kody_url: String::new(),
             kody_integration: "google".into(),
             calendar_ids: vec![],
+            google_calendar_ids: vec![],
             ics_urls: vec![],
             remind_before_secs: 60,
             require_meeting_link: true,
@@ -973,12 +977,15 @@ default = "general"
 
 [calendar]
 # EventKit reads accounts already in Calendar.app on macOS; ICS is the Linux default.
+# Google accounts signed in from Settings → Calendar are read alongside whichever source is set here.
 source = "eventkit"
 # Optional advanced connection via Kody. Empty = not connected.
 kody_url = ""
 kody_integration = "google"
 # calendars to watch (ids); empty = primary
 calendar_ids = []
+# Google calendars to watch from "Sign in with Google" (account|calendar id); empty = each account's primary
+google_calendar_ids = []
 # extra ICS feeds, e.g. Google → Settings → (calendar) → "Secret address in iCal format"
 ics_urls = []
 remind_before_secs = 60
