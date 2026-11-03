@@ -184,6 +184,7 @@ pub struct Controller {
     chatgpt_cancel: Arc<std::sync::atomic::AtomicBool>,
     /// Latest Recent-list read (see [`Controller::refresh_recent`]).
     recent_task: Option<Task<()>>,
+    briefs_task: Option<Task<()>>,
     /// A recording that has stopped but is still being finalized.
     finishing: Option<PathBuf>,
     /// Context gathering (Settings → Context; the meeting view's Context card).
@@ -214,6 +215,21 @@ pub struct ContextState {
     /// `context.json` per session dir, loaded off the main thread (the meeting
     /// view's Context card). `None` inside = the file doesn't exist.
     pub loaded: std::collections::HashMap<PathBuf, Option<stenly_core::context::MeetingContext>>,
+    /// Pre-meeting briefs for the upcoming calendar events, by event id, read
+    /// off the main thread by [`Controller::refresh_briefs`].
+    pub briefs: std::collections::HashMap<String, stenly_core::context::PreBrief>,
+}
+
+/// What to show for a calendar event's pre-meeting brief.
+pub enum BriefState<'a> {
+    /// Gathered: show it.
+    Ready(&'a stenly_core::context::PreBrief),
+    /// The context agent is working on it right now.
+    Preparing,
+    /// Context gathering is off (Settings → Context): show nothing, maybe a hint.
+    Off,
+    /// On, but nothing to show (not gathered yet, or nothing found).
+    None,
 }
 
 #[derive(Debug, Clone, Default)]
@@ -374,6 +390,7 @@ impl Controller {
             },
             chatgpt_cancel: Arc::default(),
             recent_task: None,
+            briefs_task: None,
             finishing: None,
             context: ContextState::default(),
             _tasks: vec![],
@@ -517,6 +534,7 @@ impl Controller {
                         if !unreachable {
                             c.calendar_fetched = Some(Utc::now());
                         }
+                        c.refresh_briefs(cx);
                         cx.notify();
                     })
                     .is_err()
@@ -532,7 +550,10 @@ impl Controller {
             stenly_core::context::prune_event_cache();
             loop {
                 cx.background_executor().timer(Duration::from_secs(60)).await;
-                if this.update(cx, |c, cx| c.gather_upcoming(cx)).is_err() {
+                if this.update(cx, |c, cx| {
+                    c.gather_upcoming(cx);
+                    c.refresh_briefs(cx);
+                }).is_err() {
                     return;
                 }
             }
@@ -551,7 +572,7 @@ impl Controller {
             .events
             .iter()
             .filter(|e| !e.declined && e.start > now && e.start - now <= chrono::Duration::minutes(c.before_mins.max(1)))
-            .filter(|e| !self.context.done_events.contains(&e.id) && stenly_core::context::load_for_event(&e.id).is_none())
+            .filter(|e| !self.context.done_events.contains(&e.id) && stenly_core::context::find_for_event(e).is_none())
             .take(2)
             .cloned()
             .collect();
@@ -566,7 +587,6 @@ impl Controller {
         self.context.running.push((key.clone(), vec![]));
         let cfg = self.config.clone();
         let (tx, rx) = crossbeam_channel::unbounded::<String>();
-        let id = ev.id.clone();
         let work = cx.background_spawn(async move {
             let seed = stenly_agent::seed_for_event(&cfg, Some(&ev));
             let scope = stenly_agent::tools::Scope { before: Some(ev.start.with_timezone(&Local)), ..Default::default() };
@@ -575,7 +595,7 @@ impl Controller {
                     let _ = tx.send(l);
                 }
             });
-            stenly_core::context::save_for_event(&id, &ctx).map(|_| ctx)
+            stenly_core::context::save_for_calendar_event(&ev, &ctx).map(|_| ctx)
         });
         self.track_context(key, work, rx, None, cx);
     }
@@ -631,6 +651,9 @@ impl Controller {
             let result = futures_race(work, poll).await;
             let _ = this.update(cx, |c, cx| {
                 c.context.running.retain(|(x, _)| x != &key);
+                if key.starts_with("event:") {
+                    c.refresh_briefs(cx);
+                }
                 match result {
                     Ok(ctx) => {
                         if let Some(note) = ctx.gathered.as_ref().and_then(|g| g.note.clone()).filter(|_| ctx.is_empty()) {
@@ -797,6 +820,7 @@ impl Controller {
             self.start_loops(cx);
         }
         self.refresh_recent(cx);
+        self.refresh_briefs(cx);
         cx.notify();
     }
 
@@ -865,6 +889,44 @@ impl Controller {
         self.recording.is_some()
     }
 
+    /// The pre-meeting brief state for one calendar event.
+    pub fn brief_state(&self, event_id: &str) -> BriefState<'_> {
+        if !self.config.context.enabled {
+            return BriefState::Off;
+        }
+        if self.context.is_running(&format!("event:{event_id}")) {
+            return BriefState::Preparing;
+        }
+        match self.context.briefs.get(event_id) {
+            Some(b) => BriefState::Ready(b),
+            None => BriefState::None,
+        }
+    }
+
+    /// Re-read the cached briefs of the upcoming events (off the main thread).
+    /// Cheap: a handful of small files, and only when something changed.
+    pub fn refresh_briefs(&mut self, cx: &mut Context<Self>) {
+        if !self.config.context.enabled {
+            if !self.context.briefs.is_empty() {
+                self.context.briefs.clear();
+                cx.notify();
+            }
+            return;
+        }
+        let now = Utc::now();
+        let events: Vec<CalendarEvent> = self.events.iter().filter(|e| e.end > now && !e.declined).take(10).cloned().collect();
+        let audio_dir = self.config.paths().audio_dir;
+        self.briefs_task = Some(cx.spawn(async move |this, cx: &mut AsyncApp| {
+            let briefs = cx.background_spawn(async move { stenly_core::context::briefs_for_events(&events, &audio_dir) }).await;
+            let _ = this.update(cx, |c, cx| {
+                if c.context.briefs != briefs {
+                    c.context.briefs = briefs;
+                    cx.notify();
+                }
+            });
+        }));
+    }
+
     pub fn next_event(&self) -> Option<&CalendarEvent> {
         let now = Utc::now();
         self.events.iter().find(|e| e.end > now)
@@ -900,6 +962,7 @@ impl Controller {
                 Some(j) => TrayState::Processing { title: j.title.clone() },
                 None => TrayState::Idle {
                     next: self.next_event().map(|e| format!("{} {}", e.start.with_timezone(&Local).format("%H:%M"), e.title)),
+                    brief: self.next_event().is_some_and(|e| matches!(self.brief_state(&e.id), BriefState::Ready(_))),
                 },
             },
         }

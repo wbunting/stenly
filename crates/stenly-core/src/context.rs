@@ -8,10 +8,11 @@
 //! the meeting, and as a `{context}` block in the summary prompt. It is never
 //! a record of the meeting itself: the prompt says the transcript wins.
 
+use crate::calendar::CalendarEvent;
 use crate::session::SessionMeta;
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, Utc};
 use serde::{Deserialize, Serialize};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 pub const FILE: &str = "context.json";
 
@@ -36,6 +37,18 @@ pub struct MeetingContext {
     /// How it was gathered (absent for context taken only from the invite).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gathered: Option<Gathered>,
+    /// The calendar event it was gathered for (pre-meeting cache only), so it
+    /// can still be found when the event's id changes.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub event: Option<EventStamp>,
+}
+
+/// Which calendar event a cached brief belongs to.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct EventStamp {
+    pub uid: String,
+    pub title: String,
+    pub start: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -248,26 +261,105 @@ fn one_line(s: &str) -> String {
 
 /// Context gathered ahead of a calendar meeting, before any session exists:
 /// `<data>/context/<event id>.json`. Copied into the session when recording starts.
-pub fn event_cache_path(event_id: &str) -> std::path::PathBuf {
-    let safe: String = event_id.chars().map(|c| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '_' }).take(150).collect();
-    crate::config::data_dir().join("context").join(format!("{safe}.json"))
+pub fn event_cache_path(event_id: &str) -> PathBuf {
+    cache_dir().join(cache_file_name(event_id))
 }
 
+fn cache_dir() -> PathBuf {
+    crate::config::data_dir().join("context")
+}
+
+fn cache_file_name(event_id: &str) -> String {
+    let safe: String = event_id.chars().map(|c| if c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.') { c } else { '_' }).take(150).collect();
+    format!("{safe}.json")
+}
+
+/// The context cached under exactly this event id. Prefer [`find_for_event`],
+/// which also survives the event's id changing.
 pub fn load_for_event(event_id: &str) -> Option<MeetingContext> {
-    serde_json::from_slice(&std::fs::read(event_cache_path(event_id)).ok()?).ok()
+    read_cached(&event_cache_path(event_id))
+}
+
+fn read_cached(path: &Path) -> Option<MeetingContext> {
+    serde_json::from_slice(&std::fs::read(path).ok()?).ok()
+}
+
+/// How far an occurrence may move and still be "the same meeting" when its id
+/// (`uid@start`) changed. Well under a day, so a daily stand-up's next
+/// occurrence never borrows today's brief; a weekly series is nowhere near.
+const MOVED_WITHIN_SECS: i64 = 6 * 3600;
+
+/// The context gathered ahead of this calendar event, if any. Matches by id
+/// first; failing that by the stamp saved with it, so a brief survives the
+/// event being moved a few hours (its id embeds the start time) or being
+/// re-issued under a new id by the calendar: same series uid and nearly the
+/// same start, or the same title at exactly the same start. Another
+/// occurrence of a recurring event never matches.
+pub fn find_for_event(ev: &CalendarEvent) -> Option<MeetingContext> {
+    find_in(&cache_dir(), ev)
+}
+
+fn find_in(dir: &Path, ev: &CalendarEvent) -> Option<MeetingContext> {
+    if let Some(c) = read_cached(&dir.join(cache_file_name(&ev.id))) {
+        return Some(c);
+    }
+    pick_moved(&read_all(dir), ev)
+}
+
+/// Every readable cached context in `dir`.
+fn read_all(dir: &Path) -> Vec<MeetingContext> {
+    let Ok(rd) = std::fs::read_dir(dir) else { return vec![] };
+    rd.flatten().filter(|e| e.path().extension().is_some_and(|x| x == "json")).filter_map(|e| read_cached(&e.path())).collect()
+}
+
+/// The stamped context that is the same meeting as `ev` under a different id.
+fn pick_moved(all: &[MeetingContext], ev: &CalendarEvent) -> Option<MeetingContext> {
+    let title = norm_title(&ev.title);
+    let mut best: Option<(i64, &MeetingContext)> = None;
+    for c in all {
+        let Some(st) = &c.event else { continue };
+        let delta = (st.start - ev.start).num_seconds().abs();
+        let same_series = !ev.uid.is_empty() && st.uid == ev.uid && delta <= MOVED_WITHIN_SECS;
+        let same_slot = delta == 0 && !title.is_empty() && norm_title(&st.title) == title;
+        if (same_series || same_slot) && best.is_none_or(|(d, _)| delta < d) {
+            best = Some((delta, c));
+        }
+    }
+    best.map(|(_, c)| c.clone())
+}
+
+fn norm_title(t: &str) -> String {
+    one_line(t).to_lowercase()
 }
 
 /// Cache context gathered ahead of a meeting. A failed run isn't cached, so
 /// the meeting is gathered again once it has been recorded.
 pub fn save_for_event(event_id: &str, ctx: &MeetingContext) -> anyhow::Result<()> {
+    save_cached(&event_cache_path(event_id), ctx)
+}
+
+/// Like [`save_for_event`], stamping the event so the brief can be found again
+/// if its id changes ([`find_for_event`]).
+pub fn save_for_calendar_event(ev: &CalendarEvent, ctx: &MeetingContext) -> anyhow::Result<()> {
+    save_in(&cache_dir(), ev, ctx)
+}
+
+fn save_in(dir: &Path, ev: &CalendarEvent, ctx: &MeetingContext) -> anyhow::Result<()> {
+    let mut ctx = ctx.clone();
+    ctx.event = Some(EventStamp { uid: ev.uid.clone(), title: ev.title.clone(), start: ev.start });
+    save_cached(&dir.join(cache_file_name(&ev.id)), &ctx)
+}
+
+fn save_cached(p: &Path, ctx: &MeetingContext) -> anyhow::Result<()> {
     if ctx.failed() {
         return Ok(());
     }
-    let p = event_cache_path(event_id);
     if let Some(d) = p.parent() {
         std::fs::create_dir_all(d)?;
     }
-    std::fs::write(&p, serde_json::to_vec_pretty(ctx)?)?;
+    let tmp = p.with_extension("json.tmp");
+    std::fs::write(&tmp, serde_json::to_vec_pretty(ctx)?)?;
+    std::fs::rename(tmp, p)?;
     Ok(())
 }
 
@@ -277,10 +369,151 @@ pub fn adopt_event_context(dir: &Path, meta: &SessionMeta) -> bool {
     if dir.join(FILE).exists() {
         return false;
     }
-    match load_for_event(&ev.id) {
-        Some(c) if !c.failed() => save(dir, &c).is_ok(),
+    match find_for_event(ev) {
+        Some(mut c) if !c.failed() => {
+            c.event = None;
+            save(dir, &c).is_ok()
+        }
         _ => false,
     }
+}
+
+// ---------------------------------------------------------------- pre-meeting brief
+
+/// What was agreed at the last matching meeting.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct LastMeeting {
+    pub title: String,
+    pub started: DateTime<Local>,
+    pub action_items: Vec<crate::summary::ActionItem>,
+}
+
+/// Everything shown before a call: the gathered context plus the action items
+/// from the last meeting with the same series or people.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct PreBrief {
+    #[serde(flatten)]
+    pub context: MeetingContext,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_meeting: Option<LastMeeting>,
+}
+
+impl MeetingContext {
+    /// Worth showing before a call: something was found and the run didn't fail.
+    pub fn is_briefable(&self) -> bool {
+        !self.is_empty() && !self.failed()
+    }
+
+    /// The brief in at most `max` characters of plain text, cut at a sentence
+    /// or word boundary (for the "Record this meeting?" prompt).
+    pub fn short_brief(&self, max: usize) -> String {
+        let text = one_line(&self.brief);
+        if text.chars().count() <= max {
+            return text;
+        }
+        let cut: String = text.chars().take(max).collect();
+        // prefer ending on a full sentence when most of the budget is used
+        if let Some(i) = cut.rfind(['.', '!', '?']).filter(|i| *i >= max * 2 / 3) {
+            return cut[..=i].to_string();
+        }
+        let cut = cut.rsplit_once(' ').map(|(a, _)| a).unwrap_or(&cut);
+        format!("{}…", cut.trim_end_matches([',', ';', ':', ' ']))
+    }
+}
+
+/// The brief for one calendar event, or `None` when nothing worth showing was
+/// gathered for it. `audio_dir` is searched for the last matching meeting.
+pub fn brief_for_event(ev: &CalendarEvent, audio_dir: &Path) -> Option<PreBrief> {
+    briefs_for_events(std::slice::from_ref(ev), audio_dir).into_iter().next().map(|(_, b)| b)
+}
+
+/// Briefs for several events at once, keyed by event id. Sessions are only
+/// read (once) if at least one event has a brief.
+pub fn briefs_for_events(events: &[CalendarEvent], audio_dir: &Path) -> std::collections::HashMap<String, PreBrief> {
+    briefs_in(&cache_dir(), events, audio_dir)
+}
+
+fn briefs_in(dir: &Path, events: &[CalendarEvent], audio_dir: &Path) -> std::collections::HashMap<String, PreBrief> {
+    // the directory is only scanned (once) if some event isn't cached under its own id
+    let mut scanned: Option<Vec<MeetingContext>> = None;
+    let mut found: Vec<(&CalendarEvent, MeetingContext)> = vec![];
+    for ev in events {
+        let c = read_cached(&dir.join(cache_file_name(&ev.id))).or_else(|| pick_moved(scanned.get_or_insert_with(|| read_all(dir)), ev));
+        if let Some(c) = c.filter(MeetingContext::is_briefable) {
+            found.push((ev, c));
+        }
+    }
+    let mut sessions: Option<Vec<(PathBuf, SessionMeta)>> = None;
+    found
+        .into_iter()
+        .map(|(ev, mut context)| {
+            context.event = None;
+            let all = sessions.get_or_insert_with(|| crate::session::list_sessions(audio_dir, usize::MAX));
+            (ev.id.clone(), PreBrief { context, last_meeting: last_meeting(ev, all) })
+        })
+        .collect()
+}
+
+/// The meeting a user is about to join: the first one that hasn't declined and
+/// hasn't ended. `events` must be sorted by start.
+pub fn next_meeting(events: &[CalendarEvent], now: DateTime<Utc>) -> Option<&CalendarEvent> {
+    events.iter().find(|e| !e.declined && e.end > now)
+}
+
+/// The most recent finished meeting that belongs with `ev` (same calendar
+/// series, else same title, else mostly the same other attendees), with its
+/// action items. `None` when there is no such meeting or it had none.
+pub fn last_meeting(ev: &CalendarEvent, sessions: &[(PathBuf, SessionMeta)]) -> Option<LastMeeting> {
+    let title = norm_title(&ev.title);
+    let mine = other_emails(ev);
+    let rank = |m: &SessionMeta| -> Option<u8> {
+        let past = m.event.as_ref();
+        if !ev.uid.is_empty() && past.is_some_and(|p| p.uid == ev.uid) {
+            return Some(0);
+        }
+        if !title.is_empty() && (norm_title(&m.title) == title || past.is_some_and(|p| norm_title(&p.title) == title)) {
+            return Some(1);
+        }
+        let theirs = past.map(other_emails).unwrap_or_default();
+        let shared = mine.intersection(&theirs).count();
+        let union = mine.union(&theirs).count();
+        (shared > 0 && shared * 2 >= union).then_some(2)
+    };
+    let (dir, meta) = sessions
+        .iter()
+        .filter(|(_, m)| m.state == crate::session::SessionState::Done && m.started.with_timezone(&Utc) < ev.start)
+        .filter_map(|s| rank(&s.1).map(|r| (r, s)))
+        // best kind of match first, then the most recent
+        .min_by_key(|(r, (_, m))| (*r, std::cmp::Reverse(m.started)))
+        .map(|(_, s)| s)?;
+    let action_items: Vec<_> = crate::session::load_detail(dir).1?.action_items.into_iter().filter(|a| !a.task.trim().is_empty()).collect();
+    (!action_items.is_empty()).then(|| LastMeeting { title: meta.title.clone(), started: meta.started, action_items })
+}
+
+/// Attendee addresses other than the calendar owner's, lowercased.
+fn other_emails(ev: &CalendarEvent) -> std::collections::BTreeSet<String> {
+    let me = ev.calendar.as_deref().unwrap_or_default();
+    ev.attendees.iter().filter(|a| !a.email.eq_ignore_ascii_case(me)).map(|a| a.email.to_lowercase()).collect()
+}
+
+// ---------------------------------------------------------------- discovery hint
+
+/// Marker that the "turn on Context" hint has been shown once.
+fn hint_marker() -> PathBuf {
+    crate::config::data_dir().join("hints").join("context-brief")
+}
+
+pub fn hint_seen() -> bool {
+    hint_marker().exists()
+}
+
+/// Record that the hint was shown, so it never appears again.
+pub fn mark_hint_seen() {
+    let p = hint_marker();
+    if let Some(d) = p.parent() {
+        let _ = std::fs::create_dir_all(d);
+    }
+    let _ = std::fs::write(p, b"");
 }
 
 /// Drop cached event context older than a week.
@@ -436,5 +669,181 @@ mod tests {
     fn prompt_block_is_capped() {
         let c = MeetingContext { open_threads: (0..200).map(|i| format!("thread number {i} with some words")).collect(), ..Default::default() };
         assert!(c.prompt_block().len() <= PROMPT_MAX_CHARS);
+    }
+
+    // ---- pre-meeting brief
+
+    fn ev(uid: &str, title: &str, start: &str) -> CalendarEvent {
+        let t = chrono::DateTime::parse_from_rfc3339(start).unwrap().to_utc();
+        CalendarEvent {
+            id: format!("{uid}@{}", t.timestamp()),
+            uid: uid.into(),
+            title: title.into(),
+            start: t,
+            end: t + chrono::Duration::minutes(30),
+            link: None,
+            organizer: None,
+            attendees: vec![],
+            description: None,
+            calendar: Some("me@example.test".into()),
+            declined: false,
+            recurring: false,
+            html_link: None,
+            calendar_name: None,
+            color: None,
+        }
+    }
+
+    fn brief(text: &str) -> MeetingContext {
+        MeetingContext { brief: text.into(), ..Default::default() }
+    }
+
+    #[test]
+    fn brief_is_found_by_event_id_and_not_for_other_events() {
+        let d = tempfile::tempdir().unwrap();
+        let a = ev("pilot@example.test", "Pilot review", "2026-11-04T10:00:00Z");
+        save_in(d.path(), &a, &brief("About the pilot.")).unwrap();
+        assert_eq!(find_in(d.path(), &a).unwrap().brief, "About the pilot.");
+        // a different meeting entirely
+        assert!(find_in(d.path(), &ev("other@example.test", "Budget", "2026-11-04T10:00:00Z")).is_none());
+        // an empty dir (never gathered)
+        assert!(find_in(&d.path().join("missing"), &a).is_none());
+    }
+
+    #[test]
+    fn brief_survives_the_event_id_changing() {
+        let d = tempfile::tempdir().unwrap();
+        let a = ev("pilot@example.test", "Pilot review", "2026-11-04T10:00:00Z");
+        save_in(d.path(), &a, &brief("About the pilot.")).unwrap();
+        // moved an hour later: the id embeds the start, so it changed
+        let moved = ev("pilot@example.test", "Pilot review", "2026-11-04T11:00:00Z");
+        assert_ne!(moved.id, a.id);
+        assert_eq!(find_in(d.path(), &moved).unwrap().brief, "About the pilot.");
+        // the calendar re-issued it under a new uid, same title and time
+        let reissued = ev("new-uid@example.test", "  pilot   REVIEW ", "2026-11-04T10:00:00Z");
+        assert_eq!(find_in(d.path(), &reissued).unwrap().brief, "About the pilot.");
+        // same new uid but moved: no way to know it's the same meeting
+        assert!(find_in(d.path(), &ev("new-uid@example.test", "Pilot review", "2026-11-04T10:30:00Z")).is_none());
+    }
+
+    #[test]
+    fn recurring_occurrences_get_their_own_brief() {
+        let d = tempfile::tempdir().unwrap();
+        let mut mon = ev("standup@example.test", "Weekly sync", "2026-11-02T09:00:00Z");
+        mon.recurring = true;
+        let mut tue = ev("standup@example.test", "Weekly sync", "2026-11-03T09:00:00Z");
+        tue.recurring = true;
+        let mut next_week = ev("standup@example.test", "Weekly sync", "2026-11-09T09:00:00Z");
+        next_week.recurring = true;
+        save_in(d.path(), &mon, &brief("Monday's brief.")).unwrap();
+        // same series uid, same title, but another day: not Monday's brief
+        assert!(find_in(d.path(), &tue).is_none());
+        assert!(find_in(d.path(), &next_week).is_none());
+        save_in(d.path(), &tue, &brief("Tuesday's brief.")).unwrap();
+        assert_eq!(find_in(d.path(), &tue).unwrap().brief, "Tuesday's brief.");
+        assert_eq!(find_in(d.path(), &mon).unwrap().brief, "Monday's brief.");
+        // an occurrence moved a little picks its own series' nearest brief
+        let tue_late = ev("standup@example.test", "Weekly sync", "2026-11-03T10:00:00Z");
+        assert_eq!(find_in(d.path(), &tue_late).unwrap().brief, "Tuesday's brief.");
+    }
+
+    #[test]
+    fn failed_and_empty_runs_are_not_briefs() {
+        let d = tempfile::tempdir().unwrap();
+        let a = ev("a@example.test", "A", "2026-11-04T10:00:00Z");
+        let failed = MeetingContext {
+            gathered: Some(Gathered { at: chrono::Local::now(), model: "m".into(), secs: 1.0, steps: vec![], stopped: Some(Stop::ModelError), note: None }),
+            ..Default::default()
+        };
+        // a failed run is never cached, so the meeting is gathered again later
+        save_in(d.path(), &a, &failed).unwrap();
+        assert!(find_in(d.path(), &a).is_none());
+        // "looked and found nothing" is cached (don't re-run) but isn't shown
+        let nothing = MeetingContext { gathered: Some(Gathered { at: chrono::Local::now(), model: "m".into(), secs: 1.0, steps: vec![], stopped: None, note: None }), ..Default::default() };
+        save_in(d.path(), &a, &nothing).unwrap();
+        assert!(find_in(d.path(), &a).is_some());
+        assert!(briefs_in(d.path(), std::slice::from_ref(&a), d.path()).is_empty());
+        save_in(d.path(), &a, &brief("Real.")).unwrap();
+        assert_eq!(briefs_in(d.path(), std::slice::from_ref(&a), d.path())[&a.id].context.brief, "Real.");
+    }
+
+    fn session(root: &Path, name: &str, title: &str, started: &str, event: Option<CalendarEvent>, items: &[(&str, &str)]) {
+        let dir = root.join(name);
+        std::fs::create_dir_all(&dir).unwrap();
+        let started = chrono::DateTime::parse_from_rfc3339(started).unwrap().with_timezone(&Local);
+        let meta = crate::session::SessionMeta {
+            title: title.into(),
+            started,
+            ended: Some(started + chrono::Duration::minutes(30)),
+            event,
+            state: crate::session::SessionState::Done,
+            note_path: None,
+            error: None,
+            routes: vec![],
+            sends: vec![],
+            shares: vec![],
+            meeting_app: None,
+            attended: None,
+        };
+        std::fs::write(dir.join("meta.json"), serde_json::to_vec(&meta).unwrap()).unwrap();
+        let summary = crate::summary::Summary {
+            action_items: items.iter().map(|(o, t)| crate::summary::ActionItem { owner: (!o.is_empty()).then(|| o.to_string()), task: t.to_string() }).collect(),
+            ..Default::default()
+        };
+        std::fs::write(dir.join("summary.json"), serde_json::to_vec(&summary).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn last_meetings_action_items_come_from_the_same_series() {
+        let root = tempfile::tempdir().unwrap();
+        let cache = tempfile::tempdir().unwrap();
+        let prev = ev("pilot@example.test", "Pilot review", "2026-10-28T10:00:00Z");
+        session(root.path(), "a", "Pilot review", "2026-10-21T10:00:00Z", Some(ev("pilot@example.test", "Pilot review", "2026-10-21T10:00:00Z")), &[("Sam", "Old item")]);
+        session(root.path(), "b", "Pilot review", "2026-10-28T10:00:00Z", Some(prev), &[("Sam", "Send the pilot scope"), ("", "Book a follow-up")]);
+        // newer but unrelated, and one after the meeting being briefed
+        session(root.path(), "c", "Budget", "2026-11-01T10:00:00Z", Some(ev("budget@example.test", "Budget", "2026-11-01T10:00:00Z")), &[("Kim", "Unrelated")]);
+        session(root.path(), "d", "Pilot review", "2026-11-09T10:00:00Z", Some(ev("pilot@example.test", "Pilot review", "2026-11-09T10:00:00Z")), &[("Sam", "From the future")]);
+        let next = ev("pilot@example.test", "Pilot review", "2026-11-04T10:00:00Z");
+        save_in(cache.path(), &next, &brief("Pilot, week 3.")).unwrap();
+        let b = briefs_in(cache.path(), std::slice::from_ref(&next), root.path()).remove(&next.id).unwrap();
+        let last = b.last_meeting.unwrap();
+        assert_eq!(last.title, "Pilot review");
+        assert_eq!(last.action_items.iter().map(|a| a.task.as_str()).collect::<Vec<_>>(), vec!["Send the pilot scope", "Book a follow-up"]);
+        // the cache stamp is internal and isn't part of what is shown
+        assert!(b.context.event.is_none());
+    }
+
+    #[test]
+    fn last_meeting_falls_back_to_title_then_people_and_may_be_absent() {
+        let root = tempfile::tempdir().unwrap();
+        let person = |e: &str| crate::calendar::Attendee { name: None, email: e.into(), status: None };
+        let mut with_sathiren = ev("one-off@example.test", "Intro call", "2026-10-30T10:00:00Z");
+        with_sathiren.attendees = vec![person("me@example.test"), person("sathiren@guest.example.org")];
+        session(root.path(), "a", "Intro call", "2026-10-30T10:00:00Z", Some(with_sathiren), &[("Alex", "Share the deck")]);
+        let all = crate::session::list_sessions(root.path(), usize::MAX);
+        // same title, different uid
+        let by_title = last_meeting(&ev("x@example.test", "intro CALL", "2026-11-04T10:00:00Z"), &all).unwrap();
+        assert_eq!(by_title.action_items[0].task, "Share the deck");
+        // different title, same other person
+        let mut follow = ev("y@example.test", "Pilot kickoff", "2026-11-04T10:00:00Z");
+        follow.attendees = vec![person("me@example.test"), person("sathiren@guest.example.org")];
+        assert!(last_meeting(&follow, &all).is_some());
+        // nothing in common
+        assert!(last_meeting(&ev("z@example.test", "Dentist", "2026-11-04T10:00:00Z"), &all).is_none());
+        // a matching meeting with no action items shows nothing
+        session(root.path(), "b", "Retro", "2026-10-31T10:00:00Z", None, &[]);
+        let all = crate::session::list_sessions(root.path(), usize::MAX);
+        assert!(last_meeting(&ev("r@example.test", "Retro", "2026-11-04T10:00:00Z"), &all).is_none());
+    }
+
+    #[test]
+    fn short_brief_cuts_cleanly() {
+        let c = brief("Pilot review with Example Labs. They are deciding on a three-month pilot. Sathiren owes pricing.");
+        assert_eq!(c.short_brief(200), "Pilot review with Example Labs. They are deciding on a three-month pilot. Sathiren owes pricing.");
+        assert_eq!(c.short_brief(80), "Pilot review with Example Labs. They are deciding on a three-month pilot.");
+        let words = brief("one two three four five six seven eight nine ten eleven twelve");
+        let cut = words.short_brief(30);
+        assert!(cut.ends_with('…') && cut.chars().count() <= 31, "{cut}");
+        assert_eq!(brief("  \n ").short_brief(40), "");
     }
 }

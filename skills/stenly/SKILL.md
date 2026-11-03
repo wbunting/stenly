@@ -22,7 +22,7 @@ so when it's an inference.
 | `get_meeting` `{id}` | summary, sections, decisions, action items, attendees, calendar event |
 | `get_transcript` `{id, offset?, max_chars?, speaker?}` | full "Me/Them [mm:ss]: …" transcript, paged |
 | `get_note` `{id}` | the markdown note as it is in the vault (incl. the user's edits) |
-| `upcoming_meetings` `{hours?}` | next calendar events — for prepping with past context |
+| `upcoming_meetings` `{hours?}` | next calendar events — for prepping with past context. Events Stenly has already briefed carry `brief` (what it is about, people, open threads, sources, last meeting's action items); `stenly-cli context next` prints the next one |
 | `list_recipes` `{}` | the user's saved prompts ("recipes": follow-up email, action items by owner, coach me, …) |
 | `run_recipe` `{recipe, id, extra?, save?}` | run one of their recipes on a meeting with Stenly's own model; use when they ask for "my recipe" |
 
