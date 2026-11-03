@@ -23,7 +23,7 @@ These terms cover the Stenly app, the Stenly command-line tools, this website (s
 
 - **Price.** A one-time payment of $10 (taxes may be added at checkout). There is no subscription. We may charge a different price to future buyers. That will not change what you have already paid for.
 - **One Mac, with room to move.** A licence works on one Mac at a time. Each key can be activated on up to 3 Macs, so you can replace or add a computer. To move it, choose Deactivate in Settings → Licence on the old Mac, then activate on the new one. If you can no longer reach the old Mac, contact us.
-- **Updates included.** Updates to the app are included in the one-time price. We do not promise a release schedule or how long we will keep publishing updates.
+- **Updates included.** New versions of the app are included in the one-time price, as free downloads from the releases page. The app does not install updates itself. We do not promise a release schedule or how long we will keep publishing updates.
 - **Free meetings.** The first 10 meetings are free. A recording shorter than a minute does not count as a meeting. After that, new recordings need a licence. Notes, search, sharing, MCP and dictation keep working, and nothing you made is hidden or deleted.
 - **How the check works.** Stenly confirms your key with Polar when you activate it and about once a week when you are online, and it keeps working offline for 30 days. If Polar says a key is no longer valid (for example it was refunded), new recordings pause until you use a valid one.
 - **Your key is yours.** Keep it private and do not publish or resell it. Keys that are shared widely may be turned off.
@@ -40,7 +40,7 @@ Please also be careful with what you share. A share link opens for anyone who ha
 
 ## Services you connect
 
-Stenly can work with outside services if you turn them on: AI providers such as OpenAI and Anthropic, Google Calendar, Notion, Slack, webhooks, and a share server. Your use of them is covered by your own agreement with each one. We are not responsible for what they do or for their availability. The [privacy policy](/privacy/) lists what each service receives.
+Stenly can work with outside services if you turn them on: AI providers such as OpenAI and Anthropic, Google Calendar (not yet enabled in released builds), Notion, Slack, webhooks, and a share server. Your use of them is covered by your own agreement with each one. We are not responsible for what they do or for their availability. The [privacy policy](/privacy/) lists what each service receives.
 
 ## The share service
 

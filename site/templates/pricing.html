@@ -17,14 +17,14 @@
     <article class="price-column">
       <div class="price-header"><h2>Build it yourself</h2><p class="price">Free</p></div>
       <p class="price-summary">Build it yourself: free (MIT). For people who are happy to compile, sign, rebuild, and update Stenly on their own.</p>
-      <ul class="price-list"><li>Full source code, MIT licensed</li><li>No trial, no licence key</li><li>Linux builds stay free</li></ul>
+      <ul class="price-list"><li>Full source code, MIT licensed</li><li>No trial, no licence key</li><li>Linux: build from source, free</li></ul>
       <a class="price-action secondary-action" href="{{ config.extra.repository_url }}">View source on GitHub <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
     </article>
 
     <article class="price-column price-featured">
       <div class="price-header"><h2>Ready to run</h2><p class="price">{{ config.extra.license_price }}</p></div>
       <p class="price-summary">Ready to run: {{ config.extra.license_price }} one-time, one Mac, updates included, {{ config.extra.free_meetings }} free meetings.</p>
-      <ul class="price-list"><li>Signed and notarized for Apple Silicon and Intel</li><li>{{ config.extra.free_meetings }} free meetings, then a licence</li><li>Updates included</li></ul>
+      <ul class="price-list"><li>Signed and notarized for Apple Silicon and Intel</li><li>{{ config.extra.free_meetings }} free meetings, then a licence</li><li>One Mac at a time, up to 3 activations</li><li>Updates included as free downloads; the app does not install them itself</li></ul>
       <div class="price-actions">
         <a class="price-action primary-action" href="{{ config.extra.macos_download_url }}">Download for macOS <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M12 4v12m-5-5 5 5 5-5M5 20h14"/></svg></a>
         {% if config.extra.checkout_url %}<a class="price-action secondary-action" id="buy-licence" href="{{ config.extra.checkout_url }}">Buy a licence — {{ config.extra.license_price }} <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>{% endif %}
@@ -41,7 +41,7 @@
   </section>
 
   <section class="pricing-notes" aria-label="Pricing notes">
-    <p>Notes, search, sharing, MCP and dictation never need a licence. After the free meetings, only starting a new recording does. Linux: free, coming soon.</p>
+    <p>Notes, search, sharing, MCP and dictation never need a licence. After the free meetings, only starting a new recording does. Linux: free, coming soon (build from source today). A source build never has a trial or limits.</p>
   </section>
 </main>
 {% endblock main %}

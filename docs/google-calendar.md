@@ -1,5 +1,7 @@
 # Sign in with Google (calendar)
 
+> **Status:** built and tested against a mock server, but **not enabled in released builds yet**. The v0.1.2 macOS release was built without a Google OAuth client, so it shows no "Sign in with Google" button; use Calendar.app (which can include your Google account) or an ICS link. Do not describe this as available until a release ships with it.
+
 Stenly can read Google Calendar directly, with no Calendar.app, Kody or ICS link. It uses
 the OAuth 2.0 installed-app flow: PKCE (S256), a loopback redirect
 (`http://127.0.0.1:<random port>/callback`), and the single scope

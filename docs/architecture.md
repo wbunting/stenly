@@ -8,7 +8,7 @@ Stenly is a Rust workspace split so product logic does not need to know which de
 | `stenly-platform` | OS integrations behind those traits: audio capture, microphone activity, desktop shell, tray, accessibility, global shortcuts, and text injection. |
 | `stenly-asr` | Voice activity detection, Parakeet inference, live transcription, and voice embeddings. |
 | `stenly-agent` | The meeting-context agent and its configured read-only context sources. |
-| `stenly-mcp` | The read-only Model Context Protocol server and client installation support. |
+| `stenly-mcp` | The local Model Context Protocol server (meeting reads, plus recipes and an opt-in share tool) and client installation support. |
 | `stenly-cli` | Headless recording, processing, administration, and diagnostics. |
 | `stenly` | The GPUI desktop application: windows, meeting views, settings, tray, and onboarding. |
 
@@ -22,7 +22,7 @@ Stenly is a Rust workspace split so product logic does not need to know which de
 2. The platform captures the microphone and available system audio; `stenly-core` persists session metadata and audio.
 3. `stenly-asr` produces transcript segments. Speaker processing may use meeting-app accessibility state, local voiceprints, and invite information.
 4. `stenly-core` builds the note and can send it to only the destinations the user configured.
-5. `stenly-mcp` exposes completed local meeting data read-only to agent clients.
+5. `stenly-mcp` exposes completed local meeting data to agent clients; its write-capable tools (saving a recipe result, sharing) are explicit and the share tool is off unless configured.
 
 Configuration paths, data folders, models, note output, and retention are user-controlled. Secrets for optional integrations are kept out of the normal configuration file.
 

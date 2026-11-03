@@ -2,22 +2,32 @@
 
 Stenly is a local-first meeting recorder and dictation app. The roadmap below describes product direction, not release commitments.
 
+## Shipped
+
+- Signed, notarized macOS app (v0.1.2) with a 10-meeting free trial and a $10 one-time licence; the source is MIT and free to build.
+- Meeting capture and shortcut-driven dictation, with on-device transcription.
+- Summaries through a ChatGPT sign-in, the installed Codex or Claude Code CLI, local Ollama or any OpenAI-compatible API key.
+- Calendars through Calendar.app (EventKit) on Mac and through ICS links.
+- End-to-end-encrypted share links on share.stenly.ai, with a self-hostable server.
+- Notes written to a Markdown folder or Obsidian vault, plus Notion, Slack and webhook destinations.
+- Local MCP server and an optional meeting-context agent that can read your own MCP servers.
+
 ## In flight
 
-- **Real speaker names.** Combine meeting-app active-speaker state, local voiceprints, invite information, and user corrections to identify speakers more usefully than generic labels.
-- **Meeting context.** A local meeting-context agent can collect prior meeting notes and the user’s configured sources before a summary is created.
+- **Real speaker names.** Combine meeting-app active-speaker state, local voiceprints, invite information, and user corrections to identify speakers more usefully than generic labels. Google Meet is not verified yet.
+- **Pre-meeting brief.** Show a brief drawn from relevant prior notes before the call. The context agent already gathers this context; showing it in the app is not finished.
+- **Sign in with Google for calendars.** Built, but not enabled in released builds yet.
 - **Templates, recipes, and destinations.** Custom note structures, repeatable prompts, and clearly labelled local or cloud destinations.
 
 ## Planned or exploratory
 
-- End-to-end-encrypted share links and a self-hostable server.
+- A Linux release (today Linux is built from source).
 - Importing audio or video files for a transcript or a full note.
-- A lightweight place for the user’s own notes during a meeting.
-- A pre-meeting brief drawn from relevant prior notes.
-- Optional tools for participants and follow-ups, including an easy way to announce that notes are being taken.
+- In-app update installation. The updater is notification-only today, and the v0.1.2 macOS build has no update feed configured.
 
 ## Not planned
 
+- A notepad or note editor inside Stenly. Notes are edited where they live: Obsidian, Notion or your Markdown editor.
 - A hosted team workspace or mandatory cloud sync.
 - A meeting bot that joins calls.
 - Mobile applications.

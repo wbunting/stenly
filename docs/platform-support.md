@@ -6,8 +6,8 @@ This separates implemented code from runtime evidence. A successful build or a p
 
 | Platform | Implementation | Evidence / limitations |
 | --- | --- | --- |
-| macOS | Native desktop, audio capture, dictation, Accessibility meeting drivers | Primary tested platform. Requires appropriate microphone, system-audio and Accessibility permissions. A release still needs signed/notarized installer and clean-install verification. |
-| Linux | PipeWire/PulseAudio capture, desktop and dictation backends | Not a claim of all-distro support. Compositor, global-shortcut permissions and audio routing vary. No meeting-app Accessibility speaker-name backend (`meeting_ax: None`). Test actual hardware/session before relying on it. |
+| macOS | Native desktop, audio capture, dictation, Accessibility meeting drivers | Primary tested platform. Requires appropriate microphone, system-audio and Accessibility permissions. The v0.1.2 release is a signed, notarized universal DMG (checked with `spctl` and `stapler`); behaviour on a clean install of another Mac is not independently verified. |
+| Linux | PipeWire/PulseAudio capture, desktop and dictation backends | No release yet (coming soon); build from source. Not a claim of all-distro support. Compositor, global-shortcut permissions and audio routing vary. No meeting-app Accessibility speaker-name backend (`meeting_ax: None`). Test actual hardware/session before relying on it. |
 | Windows | Fallback code paths | No supported system-audio meeting recording release. Do not advertise Windows support. |
 
 ## Speaker identity

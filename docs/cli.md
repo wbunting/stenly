@@ -12,7 +12,8 @@ cargo run -p stenly --release
 cargo run -p stenly-cli -- config
 cargo run -p stenly-cli -- upcoming
 
-# Google Calendar without Calendar.app (see docs/google-calendar.md)
+# Google Calendar without Calendar.app (see docs/google-calendar.md). Built, but not
+# enabled in released builds yet; it needs a build with a Google OAuth client.
 cargo run -p stenly-cli -- google-login
 cargo run -p stenly-cli -- google-calendars
 
