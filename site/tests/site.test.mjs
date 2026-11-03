@@ -304,3 +304,128 @@ test('Linux tarball URL is never linked and no undecided price claim appears on 
   assert.doesNotMatch(sitemap,/stenly-linux/);
  } finally { await rm(temp,{recursive:true,force:true}); }
 });
+
+// ---- Privacy policy and terms (required by Google OAuth verification and Polar checkout)
+const LEGAL = [['/privacy/','Privacy policy'],['/terms/','Terms of sale and use']];
+const ALL_PAGES = ['/', '/pricing/', '/install/linux/', '/install/ubuntu/', '/install/fedora/', '/install/arch/', ...LEGAL.map(([p])=>p)];
+
+for (const [path,title] of LEGAL) {
+ test(`${path} is published with its own title, canonical URL and plain-language notice`,async()=>{
+  const page=await browser.newPage();const errors=[];
+  page.on('pageerror',e=>errors.push(e.message));page.on('response',r=>{if(r.status()>=400)errors.push(`${r.status()} ${r.url()}`)});
+  const response=await page.goto(`${origin}${path}`);await page.evaluate(()=>document.fonts.ready);
+  assert.equal(response.status(),200);assert.deepEqual(errors,[]);
+  assert.equal(await page.locator('h1').count(),1);
+  assert.equal(await page.locator('h1').innerText(),title);
+  assert.equal(await page.title(),`${title} — Stenly`);
+  assert.equal(await page.locator('link[rel="canonical"]').getAttribute('href'),`https://stenly.ai${path}`);
+  assert.match(await page.locator('.legal-note').innerText(),/plain-language summary, not legal advice/i);
+  assert.match(await page.locator('.legal-note').innerText(),/lawyer has not reviewed/i);
+  assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'no horizontal overflow');
+  await page.close();
+ });
+}
+
+for (const path of ALL_PAGES) {
+ test(`footer on ${path} links Privacy and Terms`,async()=>{
+  const page=await browser.newPage();await page.goto(`${origin}${path}`);
+  const footer=page.locator('footer.colophon');
+  assert.equal(await footer.getByRole('link',{name:'Privacy',exact:true}).getAttribute('href'),'/privacy/');
+  assert.equal(await footer.getByRole('link',{name:'Terms',exact:true}).getAttribute('href'),'/terms/');
+  await page.close();
+ });
+}
+
+test('footer legal links are reachable and fit a 320px phone',async()=>{
+ const page=await browser.newPage({viewport:{width:320,height:640}});await page.goto(origin);
+ assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ await page.locator('footer.colophon').getByRole('link',{name:'Terms',exact:true}).click();
+ assert.match(page.url(),/\/terms\/$/);
+ await page.close();
+});
+
+test('pricing page links Terms (and Privacy) next to the Buy button',async()=>{
+ const page=await browser.newPage();await page.goto(`${origin}/pricing/`);
+ const actions=page.locator('.price-actions');
+ assert.equal(await actions.locator('#buy-licence').count(),1);
+ assert.equal(await actions.getByRole('link',{name:/terms of sale and use/i}).getAttribute('href'),'/terms/');
+ assert.equal(await actions.getByRole('link',{name:/privacy policy/i}).getAttribute('href'),'/privacy/');
+ await page.close();
+});
+
+test('privacy policy describes each optional service, Limited Use, and the licence facts',async()=>{
+ const page=await browser.newPage();await page.goto(`${origin}/privacy/`);
+ const text=await page.locator('main').innerText();
+ for (const re of [
+  /Parakeet/, /voiceprints?/i, /Keychain/,
+  /OpenAI/, /Anthropic/, /Ollama/, /transcript text/i, /never sends audio/i,
+  /calendar\.readonly/, /read-only/i, /revoke/i,
+  /Google API Services User Data Policy/, /Limited Use/,
+  /share\.stenly\.ai/, /plaintext title/i, /cannot read/i,
+  /Notion/, /Slack/, /webhook/i, /Obsidian/,
+  /Polar/, /merchant of record/i, /licence key/i,
+  /Update checks/i, /no meeting content and no system profile/i,
+ ]) assert.match(text,re,`privacy policy should mention ${re}`);
+ assert.equal(await page.getByRole('link',{name:'Google API Services User Data Policy'}).getAttribute('href'),'https://developers.google.com/terms/api-services-user-data-policy');
+ await page.close();
+});
+
+test('terms state the licence, price, activations, refunds via Polar, consent and as-is',async()=>{
+ const page=await browser.newPage();await page.goto(`${origin}/terms/`);
+ const text=await page.locator('main').innerText();
+ for (const re of [
+  /MIT licence/i, new RegExp(`\\${PRICE} once`), /one Mac/i, /up to 3 Macs/i,
+  new RegExp(`first ${FREE_MEETINGS} meetings are free`,'i'), /updates included/i,
+  /Polar/, /merchant of record/i, /refund/i,
+  /responsible for telling everyone/i, /consent/i, /as is/i,
+ ]) assert.match(text,re,`terms should mention ${re}`);
+ await page.close();
+});
+
+test('no page claims or loads analytics, tracking or crash reporting',async()=>{
+ const temp=await mkdtemp(join(tmpdir(),'stenly-legal-'));
+ try {
+  const output=join(temp,'output');
+  const result=spawnSync(zola,['build','--output-dir',output],{encoding:'utf8'});
+  assert.equal(result.status,0,result.stdout+result.stderr);
+  for (const path of ALL_PAGES) {
+   const html=await readFile(join(output,path==='/'?'index.html':`${path.slice(1)}index.html`),'utf8');
+   const scripts=[...html.matchAll(/<script\b[^>]*\ssrc=(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g)].map(m=>m[1]||m[2]||m[3]);
+   assert.deepEqual(scripts,['/site.js'],`${path} must only load its own script`);
+   assert.doesNotMatch(html,/googletagmanager|google-analytics|gtag\(|plausible|posthog|mixpanel|segment\.(com|io)|sentry|hotjar|fullstory|amplitude|clarity\.ms|fbq\(/i,`${path} must not load a tracker`);
+  }
+  const privacy=await readFile(join(output,'privacy','index.html'),'utf8');
+  const visible=privacy.replace(/<(script|style)[\s\S]*?<\/\1>/g,' ').replace(/<[^>]+>/g,' ');
+  assert.match(visible,/no analytics and no crash reporting/i);
+  assert.match(visible,/no analytics, no tracking scripts and no cookies/i);
+  // Never promise analytics or crash reporting exist, or are opt-in/out (DEV-43 is not built).
+  assert.doesNotMatch(visible,/(opt[- ](in|out) (of|to) (anonymous )?(analytics|telemetry|crash)|we (collect|use|send) (anonymous )?(analytics|usage data|telemetry|crash reports))/i);
+  const sitemap=await readFile(join(output,'sitemap.xml'),'utf8');
+  for (const [path] of LEGAL) assert.ok(sitemap.includes(`<loc>https://stenly.ai${path}</loc>`),`${path} in sitemap`);
+  assert.doesNotMatch(sitemap,/stenly-linux/);
+ } finally { await rm(temp,{recursive:true,force:true}); }
+});
+
+test('contact address is a marked placeholder until legal_contact_email is configured, and is never invented',async()=>{
+ const temp=await mkdtemp(join(tmpdir(),'stenly-contact-'));
+ try {
+  const build=async(email)=>{
+   const out=join(temp,email?'with':'without');
+   const cfg=await readFile('config.toml','utf8');
+   assert.match(cfg,/^legal_contact_email = ".*"$/m,'config.toml must define legal_contact_email');
+   const cfgPath=join(temp,email?'with.toml':'without.toml');
+   await writeFile(cfgPath,cfg.replace(/^legal_contact_email = ".*"$/m,`legal_contact_email = "${email}"`));
+   const r=spawnSync(zola,['--config',cfgPath,'build','--output-dir',out],{encoding:'utf8'});
+   assert.equal(r.status,0,r.stdout+r.stderr);
+   return Promise.all(LEGAL.map(([p])=>readFile(join(out,p.slice(1),'index.html'),'utf8')));
+  };
+  for (const html of await build('')) {
+   assert.match(html,/contact-placeholder/);assert.match(html,/contact email to be confirmed/);
+   assert.doesNotMatch(html,/href=["']?mailto:/,'no mailto link while no address is configured');
+  }
+  for (const html of await build('legal@example.invalid')) {
+   assert.ok(html.includes('href=mailto:legal@example.invalid'));
+   assert.doesNotMatch(html,/contact-placeholder/);
+  }
+ } finally { await rm(temp,{recursive:true,force:true}); }
+});

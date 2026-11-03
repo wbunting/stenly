@@ -198,3 +198,18 @@ h1 { margin: 0; text-align: center; font-weight: 400; }
 .pricing-notes p { margin: 0; }
 @media (max-width: 850px) { .pricing-intro { grid-template-columns: 1fr; gap: 20px; } .pricing-intro h1 { font-size: 14vw; } .pricing-grid { grid-template-columns: 1fr; } .price-column, .price-column + .price-column { min-height: 0; padding: 32px 0; border-left: 0; border-bottom: 1px solid var(--rule); } .price-featured { padding-inline: 24px !important; margin-inline: -24px; } .price-summary { min-height: 0; } .pricing-notes { flex-direction: column; } }
 @media (max-width: 540px) { .masthead nav .source-link { display: none; } .pricing-main { padding-top: 42px; } .pricing-intro h1 { font-size: 17vw; } .price { font-size: 64px; } .price-featured { padding-inline: 22px !important; margin-inline: -22px; } }
+
+.legal-links a { padding-block: 6px; }
+.legal-docs { overflow-wrap: anywhere; }
+.legal-docs h1 { font-size: clamp(44px, 7vw, 76px); margin-bottom: 14px; }
+.legal-docs .updated { margin: 0 0 30px; color: var(--muted); font-size: 13px; }
+.legal-docs h2 { margin-top: 48px; padding-top: 22px; border-top: 1px solid var(--rule); }
+.legal-docs h3 { margin: 30px 0 8px; font-size: 17px; font-weight: 600; letter-spacing: -.01em; }
+.legal-docs ul { list-style: disc; padding-left: 1.35em; margin: 0 0 1em; }
+.legal-docs li { margin: .4em 0; padding-left: .2em; }
+.legal-docs li::marker { color: #899449; }
+.legal-docs a { text-decoration: underline; text-decoration-color: #9aa657; }
+.legal-docs a:hover { text-decoration-color: currentColor; }
+.contact-placeholder { background: var(--lime); color: var(--ink); padding: .05em .35em; border-radius: 3px; }
+.price-terms { margin: 4px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.price-terms a { color: var(--ink); text-decoration: underline; text-decoration-color: #9aa657; }
