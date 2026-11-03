@@ -107,10 +107,10 @@ test('home page copy matches what v0.1.2 does',async()=>{
  const text=await page.locator('main').innerText();
  assert.match(text,/no bot joins the call/i);
  assert.match(text,/Linux from source/);
- assert.match(text,/Linux: coming soon, or build from source/);
+ assert.match(text,/Linux: coming soon\./);
  assert.match(text,/Edit it in Obsidian or Notion/);
  assert.match(text,/you remain responsible for the notice and consent rules/);
- assert.match(text,/Google Meet names are not verified yet/);
+ assert.match(text,/not yet verified on Google Meet/);
  await page.close();
 });
 
