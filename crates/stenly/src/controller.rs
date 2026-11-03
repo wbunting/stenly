@@ -311,6 +311,26 @@ pub enum ApiTest {
 
 impl EventEmitter<ControllerEvent> for Controller {}
 
+/// Open a "Join" link. Google Meet links go to the installed Meet web app when
+/// Settings ask for that (macOS) and one is found; anything else, and any
+/// failure to hand it over, opens in the default browser like every other link.
+pub fn open_join_link(url: &str, mode: stenly_core::meet_app::MeetLinks, cx: &mut App) {
+    use stenly_core::meet_app;
+    if mode != meet_app::MeetLinks::App || !cfg!(target_os = "macos") || !meet_app::is_meet_url(url) {
+        cx.open_url(url);
+        return;
+    }
+    let url = url.to_string();
+    cx.spawn(async move |cx: &mut AsyncApp| {
+        let u = url.clone();
+        let opened = cx.background_executor().spawn(async move { meet_app::open_in_app(&u) }).await;
+        if !opened {
+            let _ = cx.update(|cx| cx.open_url(&url));
+        }
+    })
+    .detach();
+}
+
 /// Display of the meeting app holding the mic. A native call app (Zoom,
 /// Teams) wins over a browser, which may hold the mic for something else.
 fn call_window_display(mic: &dyn MicActivity, apps: &[String], users: &[MicUser]) -> Option<u64> {

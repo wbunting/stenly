@@ -24,6 +24,7 @@ pub mod oauth;
 pub mod obsidian;
 pub mod ollama;
 pub mod meeting_url;
+pub mod meet_app;
 pub mod model_scores;
 pub mod note;
 pub mod platform;

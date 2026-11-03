@@ -1106,7 +1106,8 @@ impl MainWindow {
                             .gap(px(8.))
                             .when_some(join, |d, l| {
                                 let url = l.url.clone();
-                                d.child(ui::button_lead_icon("ev-join", format!("Join {}", l.provider.label()), Btn::Primary, icons::VIDEO).on_click(move |_, _, cx| cx.open_url(&url)))
+                                let mode = self.controller.read(cx).config.app.meet_links;
+                                d.child(ui::button_lead_icon("ev-join", format!("Join {}", l.provider.label()), Btn::Primary, icons::VIDEO).on_click(move |_, _, cx| crate::controller::open_join_link(&url, mode, cx)))
                             })
                             .when_some(link, |d, u| d.child(ui::button_lead_icon("ev-open", "Open in Google Calendar", Btn::Outline, icons::CALENDAR).on_click(move |_, _, cx| cx.open_url(&u)))),
                     ),
@@ -2160,6 +2161,15 @@ impl MainWindow {
             })
             .into_any_element()
         };
+        let meet_links = cfg.app.meet_links;
+        let meet_btn = {
+            use stenly_core::meet_app::MeetLinks;
+            let ctrl = ctrl.clone();
+            ui::popup("meet-links", &[(MeetLinks::Browser, "Default browser"), (MeetLinks::App, "Google Meet app")], meet_links, move |v, cx| {
+                ctrl.update(cx, |c, cx| c.set("app.meet_links", if v == MeetLinks::App { "app" } else { "browser" }, cx))
+            })
+            .into_any_element()
+        };
         div()
             .flex()
             .flex_col()
@@ -2171,6 +2181,7 @@ impl MainWindow {
             .child(ui::caption("Meetings"))
             .child(ui::card(vec![
                 ui::row(Some(icons::CALENDAR), "Remind me", Some("When to ask “Record this meeting?”".into()), remind_btn).into_any_element(),
+                ui::row(Some(icons::VIDEO), "Open Meet links in", Some("The Chrome web app, if installed; otherwise your browser".into()), meet_btn).into_any_element(),
                 ui::row(Some(icons::VIDEO), "Detect unscheduled calls", Some("Ask to record when Zoom, Meet or Teams starts using the mic".into()), tog("adhoc", "detect.ad_hoc_calls", cfg.detect.ad_hoc_calls)).into_any_element(),
                 ui::row(Some(icons::WAVE), "Stop recording", Some("When nobody has spoken for a while".into()), silence_btn).into_any_element(),
             ]))

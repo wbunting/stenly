@@ -312,11 +312,14 @@ pub struct AppConfig {
     pub launch_at_login: bool,
     /// Opt-in release checks; no effect until a signed update feed is bundled.
     pub check_updates: bool,
+    /// Where "Join Google Meet" opens: the default browser, or the installed
+    /// Google Meet web app (macOS; falls back to the browser without one).
+    pub meet_links: crate::meet_app::MeetLinks,
 }
 
 impl Default for AppConfig {
     fn default() -> Self {
-        Self { onboarded: false, show_next_in_menubar: true, launch_at_login: false, check_updates: false }
+        Self { onboarded: false, show_next_in_menubar: true, launch_at_login: false, check_updates: false, meet_links: Default::default() }
     }
 }
 
@@ -873,6 +876,9 @@ pub fn default_config_toml() -> String {
 onboarded = false
 show_next_in_menubar = true
 launch_at_login = false
+# Where "Join Google Meet" opens: "browser" (default) or "app" (the installed
+# Google Meet web app, macOS; falls back to the browser if there isn't one).
+meet_links = "browser"
 
 [me]
 # You, so meeting apps' tiles and invites can tell you from everyone else.

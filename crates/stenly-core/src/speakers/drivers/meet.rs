@@ -7,7 +7,7 @@
 //! still catches "… is speaking" labels.
 
 use super::{Capabilities, Driver};
-use crate::speakers::ax::{AxNode, AxWindow, Observation, clean_name, is_browser};
+use crate::speakers::ax::{AxNode, AxWindow, Observation, clean_name, is_browser, is_meet_pwa};
 
 pub struct Meet;
 
@@ -27,7 +27,8 @@ impl Driver for Meet {
     }
     fn claims(&self, w: &AxWindow) -> bool {
         let t = w.title.to_lowercase();
-        is_browser(&w.app) && (t.starts_with("meet") || t.contains("google meet") || t.contains("meet -"))
+        // The installed Meet web app is Meet whatever its window is called.
+        is_meet_pwa(&w.app) || is_browser(&w.app) && (t.starts_with("meet") || t.contains("google meet") || t.contains("meet -"))
     }
     fn observe(&self, w: &AxWindow) -> Observation {
         parse(&w.root)
@@ -81,5 +82,29 @@ mod tests {
         assert_eq!(o.app, "meet");
         assert_eq!(o.active, vec!["Ana Lima"]);
         assert_eq!(o.me.as_deref(), Some("Will B"));
+    }
+
+    /// The installed Meet web app: its own bundle id, and a window whose own
+    /// title is empty (the platform layer fills it from the web area).
+    #[test]
+    fn installed_web_app_is_claimed_and_read() {
+        let tile = |name: &str, speaking: bool| {
+            let mut kids = vec![text(name)];
+            if speaking {
+                kids.push(class(node("AXGroup"), "kssMZb"));
+            }
+            with(class(node("AXGroup"), "dkjMxf"), kids)
+        };
+        let pwa = "com.google.Chrome.app.kjgfgldnnfoeklkmfkjfagphfepbbdan";
+        for title in ["", "Meet - abc-defg-hij", "Meet"] {
+            let root = with(node("AXWebArea"), vec![tile("Ana Lima", false), tile("Ben Ortiz", true)]);
+            let w = window(pwa, title, root);
+            assert_eq!(super::super::driver_for(&w).map(|d| d.id()), Some("meet"), "title {title:?}");
+            let o = super::super::observe(&[w]);
+            assert_eq!((o.app.as_str(), o.active.as_slice(), o.roster.len()), ("meet", &["Ben Ortiz".to_string()][..], 2));
+        }
+        // Another web app is not claimed just for being a web app.
+        let other = window("com.google.Chrome.app.mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm", "", node("AXWebArea"));
+        assert!(super::super::driver_for(&other).is_none());
     }
 }
