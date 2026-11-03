@@ -11,4 +11,4 @@ An editorial cover, not a stacked SaaS pitch. User-pinned magazine references ov
 - Breakpoints: cover fits normal desktop viewports (1440×900, 1280×800); short viewports scroll rather than clip. Tablet rearranges story and download with note below. Phones read headline → proposition/download → example → supporting features, with natural scroll.
 - All font requests are local. No analytics, external scripts, or runtime framework. Browser selection, focus and scrollbars use the same palette.
 
-- Pricing: separate `/pricing/` page linked from the masthead and download copy; homepage stays focused. Editorial pricing table with three columns, no badges, stats, or fabricated proof. Free source build, $10 one-machine lifetime licence with free-meeting trial, and team contact.
+- Pricing: separate `/pricing/` page linked from the masthead and download copy; homepage stays focused. Editorial pricing table with three columns, no badges, stats, or fabricated proof. Free source build, $10 one-time one-Mac licence (updates included) with a free-meeting trial, and team contact.

@@ -1,6 +1,6 @@
 base_url = "https://stenly.ai"
 title = "Stenly — Know who said what. Bring the meeting to your agent."
-description = "A local-first meeting recorder and dictation app for macOS and Linux. Real speaker names, Obsidian notes, and meeting context for coding agents. No bot joins the call."
+description = "A local-first meeting recorder and dictation app: a signed macOS app, with Linux coming soon (build from source today). Obsidian notes, speaker names suggested from the call, and meeting context for coding agents. No bot joins the call."
 compile_sass = false
 build_search_index = false
 minify_html = true

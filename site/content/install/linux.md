@@ -5,7 +5,7 @@ template = "install.html"
 
 # Install Stenly on Linux
 
-Stenly is designed to run locally: it records your microphone and the audio playing on **your** computer, then writes files to your machine. Public Linux installers are not available yet; release packaging and publication are still pending. Once an installer is published, this guide will include the verified download and setup commands.
+Stenly is designed to run locally: it records your microphone and the audio playing on **your** computer, then writes files to your machine. Public Linux installers are not available yet (coming soon); release packaging and publication are still pending. Until then you can build from source with the instructions in the repository README. Once an installer is published, this guide will include the verified download and setup commands.
 
 ## One-time desktop setup
 

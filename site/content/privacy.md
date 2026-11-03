@@ -58,6 +58,8 @@ What those companies do with the text is covered by their own terms and privacy 
 
 ### Google Calendar sign-in
 
+**Not available in released builds yet.** Sign in with Google is built, but the current macOS release does not include it. This section describes how it will behave once a release enables it.
+
 If you choose **Sign in with Google**, Stenly asks Google for one permission: **read-only access to your calendars** (`calendar.readonly`). It cannot create, change or delete anything.
 
 - **What Stenly reads:** the list of your calendars, and events from the calendars you choose to watch: title, time, attendees, organiser, meeting link and description. It also reads your account's email address.
@@ -108,7 +110,7 @@ Source builds have no licence check and make no licence requests.
 
 ### Update checks
 
-Update checks are **off by default**. If you turn them on, Stenly asks a release server whether a newer version exists. The request contains what any web request does: your IP address and a user-agent that identifies the app. It sends no meeting content and no system profile. Stenly only tells you a newer version exists and links to it. It does not install anything for you, and some builds have no update feed set up at all.
+Update checks are **off by default**. If you turn them on, Stenly asks a release server whether a newer version exists. The request contains what any web request does: your IP address and a user-agent that identifies the app. It sends no meeting content and no system profile. Stenly only tells you a newer version exists and links to it. It does not install anything for you. The current macOS release has no update feed set up, so this setting does nothing there yet; new versions are on the [releases page](https://github.com/wbunting/stenly/releases/latest).
 
 ### Downloading speech models
 

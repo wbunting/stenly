@@ -1,6 +1,6 @@
 [package]
 name = "stenly"
-description = "Invisible local-first meeting recorder: calendar nudges, on-device Parakeet ASR, Obsidian notes."
+description = "Local-first meeting recorder with no bot: calendar nudges, on-device Parakeet ASR, Obsidian notes."
 version.workspace = true
 edition.workspace = true
 license.workspace = true

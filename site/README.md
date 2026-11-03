@@ -55,7 +55,7 @@ Edit `config.toml`:
 - `extra.linux_install_options`: optional array of `{ name, url }` distro instruction links. By default it points to the built-in Ubuntu / Debian, Fedora, and Arch pages.
 
 Home page downloads: the **Download for macOS** button links straight to `extra.macos_download_url` (it works without JavaScript; JS only adds the Apple icon on Macs). Linux has no release asset yet, so the home page shows **Linux: coming soon** with links to the pre-release setup guides, and `extra.linux_download_url` is deliberately not linked anywhere (tests enforce this). When a Linux asset ships, link it and update the tests. `extra.release_notes_url` and `extra.macos_min_version` feed the macOS details line. Icons are self-hosted Simple Icons (CC0; see `static/icons/LICENSE.md`).
-- `extra.license_price`, `extra.free_meetings`, and `extra.team_contact_url`: values used by `/pricing/`. Defaults are $10, 10 free meetings, and a team mailto placeholder.
+- `extra.license_price`, `extra.free_meetings`, and `extra.team_contact_url`: values used by `/pricing/`. Current values: $10, 10 free meetings (must equal `FREE_MEETINGS` in `crates/stenly-core/src/license.rs`), and a team mailto placeholder.
 - `extra.hosted_url`: optional external hosted-service URL.
 - `extra.repository_url`: source repository and setup instructions.
 
@@ -78,4 +78,4 @@ npm exec playwright install chromium
 npm test
 ```
 
-Tests start their own server on port 1112. They cover desktop fit, mobile overflow, example switching, the macOS download link, the Linux coming-soon note, no-JavaScript access, no Linux tarball links, no price or licence claims, and missing asset requests. Evidence stays in ignored directories, not Git.
+Tests start their own server on port 1112. They cover desktop fit, mobile overflow, example switching, the macOS download link, the Linux coming-soon note, no-JavaScript access, no Linux tarball links, that only the decided price claims appear, public-claim guards (no in-app editor, Google sign-in, automatic-update or "invisible" claims), and missing asset requests. Evidence stays in ignored directories, not Git.

@@ -102,6 +102,49 @@ test('macOS download is live and Linux is coming soon, without JavaScript',async
  assert.equal(await page.locator('.note-tabs').isVisible(),false);
  await context.close();
 });
+test('home page copy matches what v0.1.2 does',async()=>{
+ const page=await browser.newPage();await page.goto(origin);
+ const text=await page.locator('main').innerText();
+ assert.match(text,/no bot joins the call/i);
+ assert.match(text,/Linux from source/);
+ assert.match(text,/Linux: coming soon\./);
+ assert.match(text,/Edit it in Obsidian or Notion/);
+ assert.match(text,/you remain responsible for the notice and consent rules/);
+ assert.match(text,/not yet verified on Google Meet/);
+ await page.close();
+});
+
+// Public claims that are not true of v0.1.2 (DEV-44). Each guard names the code that decides it.
+const FALSE_CLAIMS = [
+ [/\binvisible\b|\bsecret(ly)? record|stealth|undetect/i,'consent wording: say "no bot", never "invisible" or "secret"'],
+ [/notepad|in-app (note )?edit|built-in (note )?editor|edit (your )?notes (inside|in) (the )?(app|Stenly)/i,'no in-app note editor or notepad (DEV-48/DEV-49 cancelled)'],
+ [/auto-?updat|updates? (are )?(handled|installed) (for you|automatically)|(?<!not )installs? updates (itself|automatically)|silent updates?/i,'the updater is notification-only (crates/stenly/src/updates.rs)'],
+ [/lifetime updates?/i,'updates are included in the one-time price, but no lifetime promise is made'],
+ [/in development/i,'share links are live (README, share.stenly.ai)'],
+ [/in-app (recording )?(consent|notice)|(?<!not )posts? (a|the) (recording|consent) (notice|message)/i,'no in-app consent notice exists (DEV-24 undecided)'],
+];
+test('no public page makes a claim v0.1.2 cannot back up',async()=>{
+ const temp=await mkdtemp(join(tmpdir(),'stenly-truth-'));
+ try {
+  const output=join(temp,'output');
+  const result=spawnSync(zola,['build','--output-dir',output],{encoding:'utf8'});
+  assert.equal(result.status,0,result.stdout+result.stderr);
+  const files=['index.html','pricing/index.html','privacy/index.html','terms/index.html',...['linux','ubuntu','fedora','arch'].map(slug=>`install/${slug}/index.html`)];
+  for (const file of files) {
+   const html=await readFile(join(output,file),'utf8');
+   const visible=html.replace(/<(script|style)[\s\S]*?<\/\1>/g,' ').replace(/<[^>]+>/g,' ');
+   for (const [re,why] of FALSE_CLAIMS) assert.doesNotMatch(visible,re,`${file}: ${why}`);
+  }
+  const home=await readFile(join(output,'index.html'),'utf8');
+  assert.doesNotMatch(home,/Google Calendar|Sign in with Google/i,'home page must not advertise Google Calendar sign-in');
+  const privacy=await readFile(join(output,'privacy','index.html'),'utf8');
+  assert.match(privacy,/Not available in released builds yet/);
+  assert.match(privacy,/The current macOS release has no update feed/);
+  const terms=await readFile(join(output,'terms','index.html'),'utf8');
+  assert.match(terms,/does not install updates itself/);
+ } finally { await rm(temp,{recursive:true,force:true}); }
+});
+
 test('Linux installation pages are published',async()=>{
  const page=await browser.newPage();await page.goto(origin);
  for (const [path,title] of [
@@ -227,6 +270,8 @@ for (const [width,height] of [[1440,900],[1024,768],[390,844],[320,640]]) {
   assert.match(text,/Build it yourself: free \(MIT\)/);
   assert.match(text,new RegExp(`Ready to run: \\${PRICE} one-time, one Mac, updates included, ${FREE_MEETINGS} free meetings`));
   assert.match(text,/Linux: free, coming soon/);
+  assert.match(text,/up to 3 activations/);
+  assert.match(text,/does not install them itself/);
   assert.match(text,/Encrypted sharing is available/);
   assert.doesNotMatch(text,/Lifetime updates/i);
   assert.doesNotMatch(text,/most picked|best value|200k|rating|money-back/i);

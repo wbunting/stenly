@@ -1,4 +1,4 @@
-//! stenly: invisible local-first meeting recorder.
+//! stenly: local-first meeting recorder (no bot joins the call).
 //!
 //! This crate is only wiring + views. Behaviour lives in `stenly-core`, OS code
 //! in `stenly-platform`, ASR in `stenly-asr`.
