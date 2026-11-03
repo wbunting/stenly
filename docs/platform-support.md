@@ -19,6 +19,7 @@ The source of record is `crates/stenly-core/src/speakers/drivers/mod.rs`. Its hi
 | Teams | Historical live-tree observation | Historical live-tree observation | Not verified | Topic from window title |
 | Zoom | Historical gallery observation | Label/tile implementation; unverified | Historical live-tree observation | Host tag unverified |
 | Google Meet (Chrome / Arc) | **Unverified** | **Unverified** | **Unverified** | Requires consenting live-call tests in both browsers |
+| Google Meet installed app (Chrome web app) | **Unverified** | **Unverified** | **Unverified** | Its window (bundle id `com.google.Chrome.app.<id>`, empty window title) is now detected and read with the same Meet driver; checked only against a synthetic page, not a live call. Attribution needs the same consenting two-person test, run in the installed app |
 | Other apps | No app-specific guarantee | Generic screen-reader labels, when exposed | No guarantee | May be empty |
 
 Remembered voiceprints and invite matching can help name a speaker, but are not a substitute for measuring attribution accuracy. User-renamed names do not prove automatic attribution. Linux has no app-specific name evidence.

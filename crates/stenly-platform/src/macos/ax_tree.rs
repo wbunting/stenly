@@ -5,13 +5,13 @@
 //! `AXManualAccessibility`, asks Chromium/Electron to expose their web
 //! content to assistive apps (what VoiceOver does).
 
-use objc2_app_kit::NSRunningApplication;
+use objc2_app_kit::{NSRunningApplication, NSWorkspace};
 use objc2_foundation::NSString;
 use std::collections::HashSet;
 use std::ffi::c_void;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use stenly_core::speakers::ax::{AxNode, AxWindow, MeetingAxSource, interesting_window, is_browser, meeting_app_ids};
+use stenly_core::speakers::ax::{AxNode, AxWindow, MeetingAxSource, app_shim_parts, interesting_window, is_browser, meeting_app_ids, web_area_title};
 
 type CFTypeRef = *const c_void;
 
@@ -158,6 +158,14 @@ impl MacMeetingAx {
         if (browser || electron) && self.enabled.lock().is_ok_and(|mut s| s.insert(pid)) {
             let attr = cfstr("AXManualAccessibility");
             unsafe { AXUIElementSetAttributeValue(app.0, attr.0, kCFBooleanTrue) };
+            // Chrome 156 answers AXManualAccessibility with "attribute unsupported"
+            // and exposes no web content for it; AXEnhancedUserInterface (what
+            // assistive apps set) turns it on, in the browser and in web apps.
+            // Browsers only: it is untested on the Electron apps.
+            if browser {
+                let attr = cfstr("AXEnhancedUserInterface");
+                unsafe { AXUIElementSetAttributeValue(app.0, attr.0, kCFBooleanTrue) };
+            }
         }
         let attr = cfstr("AXWindows");
         let mut wins: CFTypeRef = std::ptr::null();
@@ -179,6 +187,8 @@ impl MacMeetingAx {
             }
             let mut walker = Walker::new(browser);
             if let Some(root) = walker.walk(w, 0, false) {
+                // An installed web app's window has no title of its own.
+                let title = if title.is_empty() { web_area_title(&root).unwrap_or(title) } else { title };
                 out.push(AxWindow { app: bundle.to_string(), title, root });
             }
         }
@@ -202,6 +212,12 @@ impl MeetingAxSource for MacMeetingAx {
                 let apps = NSRunningApplication::runningApplicationsWithBundleIdentifier(&NSString::from_str(bundle));
                 for app in apps.iter() {
                     self.app_windows(bundle, app.processIdentifier(), &mut out);
+                }
+            }
+            // Installed web apps (PWAs) are separate apps, one bundle id each.
+            for app in NSWorkspace::sharedWorkspace().runningApplications().iter() {
+                if let Some(bundle) = app.bundleIdentifier().map(|b| b.to_string()).filter(|b| app_shim_parts(b).is_some_and(|(_, id)| id == stenly_core::speakers::ax::MEET_APP_ID)) {
+                    self.app_windows(&bundle, app.processIdentifier(), &mut out);
                 }
             }
         });

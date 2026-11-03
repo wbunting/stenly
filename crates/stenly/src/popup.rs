@@ -163,7 +163,7 @@ fn snooze(controller: &Entity<Controller>, prompt: &Prompt, cx: &mut App) {
 
 /// Joining is deliberately separate from recording: hand the original URL
 /// (including passcodes/query parameters) to the OS, then dismiss the nudge.
-fn join_button(prompt: &Prompt) -> Option<gpui::Stateful<gpui::Div>> {
+fn join_button(prompt: &Prompt, mode: stenly_core::meet_app::MeetLinks) -> Option<gpui::Stateful<gpui::Div>> {
     let Prompt::Upcoming(event) = prompt else { return None };
     let link = event.link.as_ref()?;
     let url = link.url.clone();
@@ -175,7 +175,7 @@ fn join_button(prompt: &Prompt) -> Option<gpui::Stateful<gpui::Div>> {
         None => crate::ui::button_lead_icon("join-meeting", label, crate::ui::Btn::Primary, crate::icons::VIDEO),
     };
     Some(button.on_click(move |_, window, cx| {
-        cx.open_url(&url);
+        crate::controller::open_join_link(&url, mode, cx);
         window.remove_window();
     }))
 }
@@ -209,7 +209,7 @@ impl Render for Popup {
                     sub,
                     {
                         let is_adhoc = matches!(p, Prompt::AdHoc { .. });
-                        let join = join_button(p);
+                        let join = join_button(p, self.controller.read(cx).config.app.meet_links);
                         let has_join = join.is_some();
                         let mut v = vec![button("record", "Record", !has_join)
                             .on_click(move |_, window, cx| {
@@ -451,7 +451,7 @@ mod tests {
         fn render(&mut self, _: &mut Window, _: &mut Context<Self>) -> impl IntoElement {
             div().w(px(W)).h(px(H)).p(px(12.)).flex().items_end().justify_end().gap(px(8.))
                 .child(button("record", "Record", false))
-                .children(join_button(&self.0))
+                .children(join_button(&self.0, Default::default()))
                 .child(crate::ui::icon_button("more", crate::icons::ELLIPSIS, 22., 12., "More"))
         }
     }
@@ -477,7 +477,7 @@ mod tests {
 
     #[test]
     fn no_join_for_linkless_or_ad_hoc_meetings() {
-        assert!(join_button(&upcoming("")).is_none());
-        assert!(join_button(&Prompt::AdHoc { app_id: "us.zoom.xos".into() }).is_none());
+        assert!(join_button(&upcoming(""), Default::default()).is_none());
+        assert!(join_button(&Prompt::AdHoc { app_id: "us.zoom.xos".into() }, Default::default()).is_none());
     }
 }

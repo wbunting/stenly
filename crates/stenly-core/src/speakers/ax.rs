@@ -133,13 +133,39 @@ pub fn meeting_app_ids() -> Vec<&'static str> {
 }
 
 pub fn is_browser(app: &str) -> bool {
-    BROWSERS.contains(&app)
+    BROWSERS.contains(&app) || app_shim_parts(app).is_some()
+}
+
+/// Chromium assigns every installed web app (PWA) the id `a`-`p` x 32 derived
+/// from its manifest, the same in every Chromium browser. Google Meet's.
+pub const MEET_APP_ID: &str = "kjgfgldnnfoeklkmfkjfagphfepbbdan";
+
+/// An installed web app runs as its own macOS app whose bundle id is the
+/// browser's plus `.app.<app id>` (`com.google.Chrome.app.kjgf…`). Returns
+/// `(browser bundle id, app id)` for such an id of a browser we know.
+pub fn app_shim_parts(app: &str) -> Option<(&str, &str)> {
+    let (host, id) = app.rsplit_once(".app.")?;
+    let app_id = id.len() == 32 && id.bytes().all(|b| (b'a'..=b'p').contains(&b));
+    (app_id && BROWSERS.contains(&host)).then_some((host, id))
+}
+
+/// The installed Google Meet web app of a Chromium browser.
+pub fn is_meet_pwa(app: &str) -> bool {
+    app_shim_parts(app).is_some_and(|(_, id)| id == MEET_APP_ID)
+}
+
+/// A web app window's `AXTitle` is empty (the page title lives on the web
+/// area, without the " - Google Chrome" suffix a browser window has), so read
+/// it from the first web area.
+pub fn web_area_title(root: &AxNode) -> Option<String> {
+    root.find(&|n| n.role() == "AXWebArea" && n.title.is_some()).and_then(|n| n.title.clone())
 }
 
 /// Whether a window is worth walking (browsers: only meeting tabs; the
-/// window title is the active tab's title).
+/// window title is the active tab's title). The Meet web app is a meeting
+/// window whatever its (empty) title says.
 pub fn interesting_window(app: &str, title: &str) -> bool {
-    if !is_browser(app) {
+    if !is_browser(app) || is_meet_pwa(app) {
         return true;
     }
     let t = title.to_lowercase();
@@ -231,5 +257,46 @@ mod tests {
         assert!(interesting_window("com.google.Chrome", "Meet - abc-defg-hij - Google Chrome"));
         assert!(!interesting_window("com.google.Chrome", "Inbox (3) - Gmail"));
         assert!(interesting_window("us.zoom.xos", "anything"));
+    }
+
+    const MEET_PWA: &str = "com.google.Chrome.app.kjgfgldnnfoeklkmfkjfagphfepbbdan";
+
+    #[test]
+    fn web_app_bundle_ids_are_browsers() {
+        assert!(is_browser(MEET_PWA));
+        assert_eq!(app_shim_parts(MEET_PWA), Some(("com.google.Chrome", MEET_APP_ID)));
+        // Same scheme in other Chromium browsers (Helium's was read from an installed app).
+        assert!(is_browser("net.imput.helium.app.kjgfgldnnfoeklkmfkjfagphfepbbdan"));
+        assert!(is_browser("com.microsoft.edgemac.app.abcdefghijklmnopabcdefghijklmnop"));
+        assert!(is_browser("com.brave.Browser.app.abcdefghijklmnopabcdefghijklmnop"));
+        // Not an app id (wrong length / alphabet), not a browser we know, or a plain helper.
+        assert!(!is_browser("com.google.Chrome.app.kjgf"));
+        assert!(!is_browser("com.google.Chrome.app.KJGFGLDNNFOEKLKMFKJFAGPHFEPBBDAN"));
+        assert!(!is_browser("com.example.Notes.app.kjgfgldnnfoeklkmfkjfagphfepbbdan"));
+        assert!(!is_browser("com.google.Chrome.helper"));
+        assert!(!is_browser("com.google.Chrome.app"));
+    }
+
+    #[test]
+    fn meet_web_app_windows_are_walked_without_a_title() {
+        assert!(is_meet_pwa(MEET_PWA));
+        assert!(is_meet_pwa("net.imput.helium.app.kjgfgldnnfoeklkmfkjfagphfepbbdan"));
+        assert!(!is_meet_pwa("com.google.Chrome"));
+        // Another web app (Gmail's would be a different id) is not walked unless its title says so.
+        let other = "com.google.Chrome.app.mmmmmmmmmmmmmmmmmmmmmmmmmmmmmmmm";
+        assert!(!is_meet_pwa(other));
+        assert!(interesting_window(MEET_PWA, ""));
+        assert!(interesting_window(MEET_PWA, "Meet - abc-defg-hij"));
+        assert!(!interesting_window(other, ""));
+        assert!(!interesting_window(other, "Inbox (3) - Gmail"));
+        assert!(interesting_window(other, "Microsoft Teams"));
+    }
+
+    #[test]
+    fn title_comes_from_the_web_area() {
+        let area = AxNode { role: Some("AXWebArea".into()), title: Some("Meet - abc-defg-hij".into()), ..Default::default() };
+        let root = AxNode { role: Some("AXWindow".into()), children: vec![AxNode { role: Some("AXGroup".into()), children: vec![area], ..Default::default() }], ..Default::default() };
+        assert_eq!(web_area_title(&root).as_deref(), Some("Meet - abc-defg-hij"));
+        assert_eq!(web_area_title(&AxNode::default()), None);
     }
 }
