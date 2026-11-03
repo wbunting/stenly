@@ -42,7 +42,7 @@ pub struct Toast {
 }
 
 /// Dev: STENLY_TOAST_HOLD=1 keeps notices up, unanimated (for screenshots).
-fn hold() -> bool {
+pub(crate) fn hold() -> bool {
     std::env::var_os("STENLY_TOAST_HOLD").is_some()
 }
 

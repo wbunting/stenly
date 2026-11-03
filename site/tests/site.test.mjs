@@ -139,7 +139,9 @@ test('no public page makes a claim v0.1.2 cannot back up',async()=>{
   assert.doesNotMatch(home,/Google Calendar|Sign in with Google/i,'home page must not advertise Google Calendar sign-in');
   const privacy=await readFile(join(output,'privacy','index.html'),'utf8');
   assert.match(privacy,/Not available in released builds yet/);
-  assert.match(privacy,/The current macOS release has no update feed/);
+  assert.match(privacy,/api\.github\.com/);
+  assert.match(privacy,/never downloads or installs anything/);
+  assert.doesNotMatch(privacy,/has no update feed/);
   const terms=await readFile(join(output,'terms','index.html'),'utf8');
   assert.match(terms,/does not install updates itself/);
  } finally { await rm(temp,{recursive:true,force:true}); }
@@ -409,7 +411,7 @@ test('privacy policy describes each optional service, Limited Use, and the licen
   /share\.stenly\.ai/, /plaintext title/i, /cannot read/i,
   /Notion/, /Slack/, /webhook/i, /Obsidian/,
   /Polar/, /merchant of record/i, /licence key/i,
-  /Update checks/i, /no meeting content and no system profile/i,
+  /Update checks/i, /no meeting content, no account and no system profile/i,
  ]) assert.match(text,re,`privacy policy should mention ${re}`);
  assert.equal(await page.getByRole('link',{name:'Google API Services User Data Policy'}).getAttribute('href'),'https://developers.google.com/terms/api-services-user-data-policy');
  await page.close();

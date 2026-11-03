@@ -187,8 +187,14 @@ fn main() {
             let tray = tray.clone();
             let pill_shell = shell.clone();
             let last = std::cell::RefCell::new(None);
+            let last_update = std::cell::RefCell::new(None::<String>);
             cx.observe(&controller, move |ctrl, cx| {
                 let c = ctrl.read(cx);
+                let update = c.update_available.clone();
+                if *last_update.borrow() != update {
+                    tray.borrow_mut().set_update(update.as_deref());
+                    *last_update.borrow_mut() = update;
+                }
                 let state = c.tray_state();
                 let title = c.tray_title();
                 let recording = c.is_recording();
@@ -244,6 +250,12 @@ fn main() {
                             TrayCommand::ToggleDictation => {
                                 if let Some(d) = dictation_entity() {
                                     d.update(cx, |d, cx| if matches!(d.phase, dictation::Phase::Recording { .. }) { d.stop(cx) } else { d.start(cx) });
+                                }
+                            }
+                            TrayCommand::OpenUpdate => {
+                                // The release page only; nothing is downloaded or installed.
+                                if let Some(url) = ctrl.read(cx).update_download.clone() {
+                                    cx.open_url(&url);
                                 }
                             }
                             TrayCommand::OpenDictations => {

@@ -136,6 +136,12 @@ pub struct Controller {
     license_auto_notified: bool,
     pub update_status: String,
     pub update_download: Option<String>,
+    /// A newer stable release found on GitHub ("v0.1.3"): drives the menubar item.
+    pub update_available: Option<String>,
+    /// The once-per-version notice for `update_available` has not been shown yet.
+    pub update_notice_pending: bool,
+    /// The native (Sparkle) updater is in charge; otherwise GitHub Releases is.
+    pub update_native: bool,
     pub levels: Option<Arc<stenly_core::session::Levels>>,
     recording: Option<Recording>,
     update_activity: Option<stenly_core::update::Activity>,
@@ -372,6 +378,9 @@ impl Controller {
             license_auto_notified: false,
             update_status: String::new(),
             update_download: None,
+            update_available: None,
+            update_notice_pending: false,
+            update_native: false,
             levels: None,
             recording: None,
             update_activity: None,
@@ -945,6 +954,29 @@ impl Controller {
                 }
             });
         }));
+    }
+
+    /// A newer release was found: remember it for Settings and the menubar, and
+    /// queue the one-time notice if this version has not been announced.
+    pub fn set_update_available(&mut self, found: stenly_core::update::Release) {
+        self.update_status = format!("Version {} is available. Download and install when convenient.", found.version);
+        self.update_download = Some(found.url);
+        self.update_notice_pending = stenly_core::update::should_announce(&found.version);
+        self.update_available = Some(found.version);
+    }
+
+    pub fn clear_update_available(&mut self) {
+        self.update_download = None;
+        self.update_available = None;
+        self.update_notice_pending = false;
+    }
+
+    /// Update checks were turned off: drop any result and say so.
+    pub fn clear_update(&mut self) {
+        self.clear_update_available();
+        if !self.update_native && stenly_core::update::release_repository().is_some() {
+            self.update_status = "Release notifications are off.".into();
+        }
     }
 
     pub fn next_event(&self) -> Option<&CalendarEvent> {
