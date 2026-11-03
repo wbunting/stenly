@@ -71,7 +71,7 @@ mod real {
             menu.append(&PredefinedMenuItem::separator())?;
             menu.append(&quit)?;
 
-            let ids = (toggle.id().clone(), open.id().clone(), notes.id().clone(), quit.id().clone(), dictate.id().clone(), history.id().clone());
+            let ids = (toggle.id().clone(), open.id().clone(), notes.id().clone(), quit.id().clone(), dictate.id().clone(), history.id().clone(), status.id().clone());
             let toggle_state = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             let ts = toggle_state.clone();
             MenuEvent::set_event_handler(Some(move |e: MenuEvent| {
@@ -87,6 +87,8 @@ mod real {
                     TrayCommand::ToggleDictation
                 } else if e.id == ids.5 {
                     TrayCommand::OpenDictations
+                } else if e.id == ids.6 {
+                    TrayCommand::OpenNextMeeting
                 } else {
                     return;
                 };
@@ -119,9 +121,14 @@ mod real {
         }
 
         fn set_state(&mut self, state: &TrayState) {
+            // Only the "Next: …" line does anything: it opens that meeting's brief.
+            let mut clickable = false;
             let (status, recording) = match state {
-                TrayState::Idle { next: Some(n) } => (format!("Next: {n}"), false),
-                TrayState::Idle { next: None } => ("No meetings coming up".to_string(), false),
+                TrayState::Idle { next: Some(n), brief } => {
+                    clickable = true;
+                    (if *brief { format!("Next: {n} · View brief") } else { format!("Next: {n}") }, false)
+                }
+                TrayState::Idle { next: None, .. } => ("No meetings coming up".to_string(), false),
                 TrayState::Recording { title, since } => {
                     let mins = (chrono::Local::now() - *since).num_minutes();
                     (format!("● Recording “{title}” — {mins} min"), true)
@@ -129,6 +136,7 @@ mod real {
                 TrayState::Processing { title } => (format!("Transcribing “{title}”…"), false),
             };
             self.status.set_text(status);
+            self.status.set_enabled(clickable);
             self.toggle.set_text(if recording { "Stop recording" } else { "Start recording" });
             if let Some(ts) = TOGGLE_STATE.get() {
                 ts.store(recording, std::sync::atomic::Ordering::Relaxed);

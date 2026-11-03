@@ -299,7 +299,8 @@ pub trait DesktopShell {
 /// Status shown in the tray / menubar.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TrayState {
-    Idle { next: Option<String> },
+    /// `brief`: a pre-meeting brief is ready for the next meeting.
+    Idle { next: Option<String>, brief: bool },
     Recording { title: String, since: chrono::DateTime<chrono::Local> },
     Processing { title: String },
 }
@@ -310,6 +311,8 @@ pub enum TrayCommand {
     StartRecording,
     StopRecording,
     OpenWindow,
+    /// The "Next: …" item: open the next meeting's brief (its card).
+    OpenNextMeeting,
     OpenNotesFolder,
     /// Start (or stop) a dictation from the menu.
     ToggleDictation,

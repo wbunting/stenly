@@ -226,6 +226,16 @@ fn main() {
                             TrayCommand::OpenWindow => {
                                 main_window::open(ctrl, None, cx);
                             }
+                            TrayCommand::OpenNextMeeting => {
+                                // The next meeting's card, which carries its brief.
+                                if let Some(ev) = ctrl.read(cx).next_event().cloned() {
+                                    if let Some(h) = main_window::open(ctrl.clone(), Some(main_window::Page::Home), cx) {
+                                        let _ = h.update(cx, |w, window, cx| w.show_event_card(ev, window, cx));
+                                    }
+                                } else {
+                                    main_window::open(ctrl, None, cx);
+                                }
+                            }
                             TrayCommand::OpenNotesFolder => {
                                 let dir = ctrl.read(cx).config.paths().notes_dir;
                                 let _ = std::fs::create_dir_all(&dir);
@@ -318,6 +328,25 @@ fn main() {
                 popup::show(popup::PopupKind::Stop("Nobody has spoken for 3 minutes".into()), ctrl.clone(), shell.as_ref(), cx);
                 live_pill::show(ctrl, shell.as_ref(), cx);
             });
+        }
+
+        // Dev: STENLY_DEMO_PROMPT=<title> shows the "Record this meeting?" prompt for the
+        // upcoming calendar event with that title (e.g. from a synthetic ICS file).
+        if let Ok(title) = std::env::var("STENLY_DEMO_PROMPT") {
+            let ctrl = controller.clone();
+            let shell = shell.clone();
+            cx.spawn(async move |cx: &mut AsyncApp| {
+                for _ in 0..40 {
+                    cx.background_executor().timer(Duration::from_millis(250)).await;
+                    let ev = ctrl.read_with(cx, |c, _| c.events.iter().find(|e| e.title.contains(&title)).cloned());
+                    if let Some(ev) = ev {
+                        let (ctrl, shell) = (ctrl.clone(), shell.clone());
+                        let _ = cx.update(|cx| popup::show(popup::PopupKind::Start(stenly_core::scheduler::Prompt::Upcoming(ev)), ctrl, shell.as_ref(), cx));
+                        break;
+                    }
+                }
+            })
+            .detach();
         }
 
         // Dev: STENLY_DEMO_JOIN=<meeting url> shows the pre-meeting prompt for a

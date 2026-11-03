@@ -180,7 +180,7 @@ fn tool_defs() -> Vec<Value> {
         json!({
             "name": "upcoming_meetings",
             "title": "Upcoming calendar meetings",
-            "description": "Calendar events in the next N hours from the calendars Stenly watches (useful to prep for a call with past transcripts).",
+            "description": "Calendar events in the next N hours from the calendars Stenly watches (useful to prep for a call with past transcripts). When Stenly has already gathered a pre-meeting brief for an event (Settings → Context), it is included as `brief`: what the meeting is about, the people, open threads, sources and the last meeting's action items.",
             "inputSchema": { "type": "object", "properties": {
                 "hours": { "type": "integer", "minimum": 1, "maximum": 336, "default": 24 },
             }},
@@ -284,10 +284,12 @@ pub fn call_tool(name: &str, args: &Value) -> Result<String> {
                 return Ok("No calendar connected in Stenly (Settings → Calendar).".into());
             }
             let (events, errors) = stenly_core::calendar::upcoming(&c, now, now + chrono::Duration::hours(hours));
+            let mut briefs = stenly_core::context::briefs_for_events(&events, &store.audio_dir);
             let list: Vec<Value> = events
                 .iter()
                 .map(|e| {
                     json!({
+                        "brief": briefs.remove(&e.id),
                         "title": e.title,
                         "start": e.start.with_timezone(&chrono::Local).to_rfc3339(),
                         "end": e.end.with_timezone(&chrono::Local).to_rfc3339(),

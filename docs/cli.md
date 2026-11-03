@@ -42,6 +42,18 @@ path = ""         # only if Stenly can't find it
 model = ""        # "" = the tool's default
 ```
 
+## Pre-meeting briefs
+
+Context gathering is off by default (Settings → Context, or `[context] enabled = true`). When it is on, the app runs the context agent `before_mins` (default 10) minutes before a calendar meeting and saves the result. It then shows a short brief on that meeting's Coming Up card, in the "Record this meeting?" prompt, and from the menubar's next-meeting item: what the meeting is about, the key people, open threads, and the last matching meeting's action items, with its sources. The agent needs a model that can call tools: Ollama, a hosted API or ChatGPT work; the Codex / Claude Code provider does not.
+
+```sh
+stenly-cli context next            # the brief for the next meeting, as JSON; reads only, never calls a model
+stenly-cli context next --gather   # none yet? run the agent now and save it, as the app would
+stenly-cli context next --hours 48 # look further ahead
+```
+
+`context next` exits 1 with a hint if there is no brief. The MCP `upcoming_meetings` tool includes the same brief as `brief` on each event that has one.
+
 ## MCP
 
 `stenly-mcp` makes local meeting history available to an agent over the Model Context Protocol. Clients can list and search meetings, retrieve transcripts and notes, and inspect upcoming meetings. Recipes can call your configured summary model and optionally save their results, so not every tool is read-only. Sharing tools are exposed only when `[mcp] write_tools = true` is explicitly configured; check `stenly-mcp tools` for the installed version.

@@ -64,6 +64,8 @@ pub struct MainWindow {
     menu_open: bool,
     /// Calendar event whose details card is open (Coming Up → click), and where.
     event_card: Option<(stenly_core::calendar::CalendarEvent, gpui::Point<gpui::Pixels>)>,
+    /// The open card carries the one-time "turn on Context" hint.
+    card_hint: bool,
     /// Brief status notice in the bottom-right corner ("Copied").
     toast: Option<crate::toast::Toast>,
     toast_seq: u64,
@@ -554,6 +556,7 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                         speaker_editor: None,
                         menu_open: false,
                         event_card: None,
+                        card_hint: false,
                         toast: None,
                         toast_seq: 0,
                         sharing: false,
@@ -660,6 +663,39 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                     if std::env::var_os("STENLY_EVENT_CARD").is_some() {
                         if let Some(ev) = demo_events(Utc::now()).into_iter().nth(2) {
                             mw.event_card = Some((ev, gpui::point(px(420.), px(330.))));
+                        }
+                    }
+                    // Dev: STENLY_BRIEF_PREPARING=<title> marks that upcoming event's brief as
+                    // "being gathered", and STENLY_EVENT_CARD_TITLE=<title> opens its card,
+                    // once the calendar (e.g. a synthetic ICS file) has loaded.
+                    {
+                        let preparing = std::env::var("STENLY_BRIEF_PREPARING").ok();
+                        let card = std::env::var("STENLY_EVENT_CARD_TITLE").ok();
+                        if preparing.is_some() || card.is_some() {
+                            cx.spawn_in(window, async move |this, cx| {
+                                for _ in 0..40 {
+                                    cx.background_executor().timer(Duration::from_millis(250)).await;
+                                    let found = this.update_in(cx, |mw, window, cx| {
+                                        let events = mw.controller.read(cx).events.clone();
+                                        if events.is_empty() {
+                                            return false;
+                                        }
+                                        let by_title = |t: &Option<String>| t.as_ref().and_then(|t| events.iter().find(|e| e.title.contains(t.as_str())).cloned());
+                                        if let Some(ev) = by_title(&preparing) {
+                                            mw.controller.update(cx, |c, _| c.context.running.push((format!("event:{}", ev.id), vec![])));
+                                        }
+                                        if let Some(ev) = by_title(&card) {
+                                            mw.show_event_card(ev, window, cx);
+                                        }
+                                        cx.notify();
+                                        true
+                                    });
+                                    if found.unwrap_or(true) {
+                                        break;
+                                    }
+                                }
+                            })
+                            .detach();
                         }
                     }
                     // Dev: STENLY_SEARCH=<query> opens the search palette with that query.
@@ -872,15 +908,128 @@ fn nav_item(id: &'static str, label: &'static str, data: crate::icons::Sym, acti
 impl MainWindow {
     fn show_event(&mut self, ev: stenly_core::calendar::CalendarEvent, window: &mut Window, cx: &mut Context<Self>) {
         let pos = window.mouse_position();
-        self.event_card = match &self.event_card {
-            Some((open, _)) if open.id == ev.id => None,
-            _ => Some((ev, pos)),
-        };
+        match &self.event_card {
+            Some((open, _)) if open.id == ev.id => self.close_event_card(),
+            _ => self.open_event_card(ev, pos, cx),
+        }
         cx.notify();
     }
 
+    fn close_event_card(&mut self) {
+        self.event_card = None;
+        self.card_hint = false;
+    }
+
+    fn open_event_card(&mut self, ev: stenly_core::calendar::CalendarEvent, pos: gpui::Point<gpui::Pixels>, cx: &mut Context<Self>) {
+        // Where a brief would be: say once, quietly, how to get one.
+        self.card_hint = !self.controller.read(cx).config.context.enabled && !stenly_core::context::hint_seen();
+        if self.card_hint {
+            stenly_core::context::mark_hint_seen();
+        }
+        self.event_card = Some((ev, pos));
+    }
+
+    /// Meetings page with this event's card (and so its brief) open: from the
+    /// "Record this meeting?" prompt and the menubar's next-meeting item.
+    pub fn show_event_card(&mut self, ev: stenly_core::calendar::CalendarEvent, window: &mut Window, cx: &mut Context<Self>) {
+        self.go(Page::Home, cx);
+        // roughly the middle of the content column, below the Coming Up heading
+        let w = f32::from(window.viewport_size().width);
+        let pos = gpui::point(px(((SIDEBAR_W + w) / 2. - 160.).max(SIDEBAR_W)), px(150.));
+        self.open_event_card(ev, pos, cx);
+        cx.notify();
+    }
+
+    /// Card section: the pre-meeting brief, "Preparing brief…", or (once) how to turn briefs on.
+    fn brief_section(&self, ev: &stenly_core::calendar::CalendarEvent, cx: &mut Context<Self>) -> Option<AnyElement> {
+        use crate::controller::BriefState;
+        let heading = |right: Option<AnyElement>| {
+            div()
+                .flex()
+                .items_center()
+                .gap(px(6.))
+                .h(px(18.))
+                .child(icon(icons::SPARKLES, 12., theme::muted()))
+                .child(div().flex_1().text_size(px(theme::SUBHEAD)).font_weight(FontWeight::SEMIBOLD).text_color(theme::muted()).child("Brief"))
+                .children(right)
+        };
+        let label = |t: &'static str| div().pt(px(4.)).text_size(px(theme::SUBHEAD)).font_weight(FontWeight::SEMIBOLD).text_color(theme::faint()).child(t);
+        let label_s = |t: String| div().pt(px(4.)).text_size(px(theme::SUBHEAD)).font_weight(FontWeight::SEMIBOLD).text_color(theme::faint()).child(t);
+        let body = div().px(px(14.)).py(px(10.)).flex().flex_col().gap(px(6.));
+        match self.controller.read(cx).brief_state(&ev.id) {
+            BriefState::Preparing => Some(
+                body.child(heading(Some(div().flex().items_center().gap(px(6.)).text_size(px(theme::SUBHEAD)).text_color(theme::faint()).child(ui::spinner("brief-preparing", 10., theme::muted())).child("Preparing brief…").into_any_element())))
+                    .into_any_element(),
+            ),
+            BriefState::Off if self.card_hint => {
+                let go_ctx = cx.listener(|this, _, _, cx| {
+                    this.close_event_card();
+                    this.go(Page::Context, cx);
+                });
+                Some(
+                    body.child(heading(None))
+                        .child(div().text_size(px(theme::SUBHEAD)).line_height(px(16.)).text_color(theme::muted()).child("Stenly can gather a short brief on the people and open threads before each meeting."))
+                        .child(div().flex().child(ui::button("brief-enable", "Turn on in Settings → Context", Btn::Ghost).on_click(go_ctx)))
+                        .into_any_element(),
+                )
+            }
+            BriefState::Ready(b) => {
+                let c = &b.context;
+                // cut at a sentence (or word) so it never clips mid-line
+                let text = c.short_brief(300);
+                let people: Vec<&stenly_core::context::ContextPerson> = c.people.iter().filter(|p| !p.name.trim().is_empty()).collect();
+                let threads: Vec<&String> = c.open_threads.iter().filter(|t| !t.trim().is_empty()).collect();
+                let more = |n: usize| div().text_size(px(theme::SUBHEAD)).text_color(theme::faint()).child(format!("and {n} more"));
+                let line = |t: String| div().text_size(px(theme::SUBHEAD)).line_height(px(15.)).text_color(theme::text()).line_clamp(2).child(t);
+                let mut d = body.child(heading(None));
+                if !text.is_empty() {
+                    d = d.child(div().text_size(px(theme::CALLOUT)).line_height(px(17.)).text_color(theme::text()).child(text));
+                }
+                if !people.is_empty() {
+                    d = d.child(label("People")).children(people.iter().take(3).map(|p| {
+                        div()
+                            .flex()
+                            .gap(px(6.))
+                            .text_size(px(theme::SUBHEAD))
+                            .line_height(px(15.))
+                            .child(div().flex_shrink_0().font_weight(FontWeight::MEDIUM).child(p.name.trim().to_string()))
+                            .child(div().min_w_0().truncate().text_color(theme::muted()).child(p.short().unwrap_or_default()))
+                    }));
+                    if people.len() > 3 {
+                        d = d.child(more(people.len() - 3));
+                    }
+                }
+                if !threads.is_empty() {
+                    d = d.child(label("Open threads")).children(threads.iter().take(2).map(|t| line(format!("• {}", t.split_whitespace().collect::<Vec<_>>().join(" ")))));
+                    if threads.len() > 2 {
+                        d = d.child(more(threads.len() - 2));
+                    }
+                }
+                if let Some(last) = &b.last_meeting {
+                    d = d.child(label_s(format!("Action items from last meeting · {}", last.started.format("%b %-d")))).children(last.action_items.iter().take(3).map(|a| {
+                        line(match a.owner.as_deref().map(str::trim).filter(|o| !o.is_empty()) {
+                            Some(o) => format!("• {o}: {}", a.task.trim()),
+                            None => format!("• {}", a.task.trim()),
+                        })
+                    }));
+                    if last.action_items.len() > 3 {
+                        d = d.child(more(last.action_items.len() - 3));
+                    }
+                }
+                // Sources: one faint line at the foot, never louder than the content.
+                let sources: Vec<&str> = c.sources.iter().map(|s| s.title.trim()).filter(|s| !s.is_empty()).collect();
+                if !sources.is_empty() {
+                    d = d.child(div().pt(px(2.)).text_size(px(theme::FOOTNOTE)).line_height(px(13.)).text_color(theme::faint()).line_clamp(2).child(format!("Sources: {}", sources.join(" · "))));
+                }
+                Some(d.into_any_element())
+            }
+            BriefState::Off | BriefState::None => None,
+        }
+    }
+
     /// Granola-style event card: title, when, description, open in calendar, guests.
-    fn event_card(&self, ev: &stenly_core::calendar::CalendarEvent, _cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
+    fn event_card(&self, ev: &stenly_core::calendar::CalendarEvent, cx: &mut Context<Self>) -> gpui::Stateful<gpui::Div> {
+        let brief = self.brief_section(ev, cx);
         let s = ev.start.with_timezone(&Local);
         let e = ev.end.with_timezone(&Local);
         let when = format!("{} · {} – {}", s.format("%a, %b %-d"), s.format("%-I:%M"), e.format("%-I:%M %p"));
@@ -962,6 +1111,7 @@ impl MainWindow {
                             .when_some(link, |d, u| d.child(ui::button_lead_icon("ev-open", "Open in Google Calendar", Btn::Outline, icons::CALENDAR).on_click(move |_, _, cx| cx.open_url(&u)))),
                     ),
             )
+            .when_some(brief, |d, b| d.child(div().h(px(1.)).bg(theme::divider())).child(b))
             .when(!guest_rows.is_empty(), |d| {
                 d.child(div().h(px(1.)).bg(theme::divider())).child(
                     div()
@@ -1857,6 +2007,12 @@ impl MainWindow {
                     format!("{} – {}", local_s.format("%-I:%M %p"), local_e.format("%-I:%M %p"))
                 };
                 let when = if live { format!("Now · until {}", local_e.format("%-I:%M %p")) } else { range };
+                // A quiet note on the same line as the time (the row never changes height).
+                let brief_note: Option<AnyElement> = match c.brief_state(&e.id) {
+                    crate::controller::BriefState::Ready(_) => Some(div().flex().items_center().gap(px(3.)).text_color(theme::faint()).child(icon(icons::SPARKLES, 10., theme::faint())).child("Brief").into_any_element()),
+                    crate::controller::BriefState::Preparing => Some(div().text_color(theme::faint()).child("Preparing brief…").into_any_element()),
+                    _ => None,
+                };
                 let bar = if live { theme::red() } else { e.color.as_deref().map(theme::hex).unwrap_or(theme::accent()) };
                 items.push(
                     div()
@@ -1883,7 +2039,16 @@ impl MainWindow {
                                 .flex_col()
                                 .gap(px(1.))
                                 .child(div().text_size(px(theme::BODY)).font_weight(FontWeight::MEDIUM).truncate().child(e.title.clone()))
-                                .child(div().text_size(px(theme::SUBHEAD)).font_features(tnum2()).text_color(if live { theme::red() } else { theme::muted() }).truncate().child(when)),
+                                .child(
+                                    div()
+                                        .flex()
+                                        .items_center()
+                                        .gap(px(8.))
+                                        .h(px(14.))
+                                        .text_size(px(theme::SUBHEAD))
+                                        .child(div().min_w_0().font_features(tnum2()).text_color(if live { theme::red() } else { theme::muted() }).truncate().child(when))
+                                        .children(brief_note),
+                                ),
                         )
                         .when(!recording, |d| {
                             d.child(
@@ -3456,7 +3621,7 @@ impl Render for MainWindow {
                         .inset_0()
                         .occlude()
                         .on_mouse_down(gpui::MouseButton::Left, cx.listener(|this, _, _, cx| {
-                            this.event_card = None;
+                            this.close_event_card();
                             cx.notify();
                         }))
                         .child(gpui::deferred(gpui::anchored().position(pos).snap_to_window_with_margin(px(12.)).child(div().mt(px(8.)).child(card)))),

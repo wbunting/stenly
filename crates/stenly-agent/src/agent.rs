@@ -257,6 +257,7 @@ pub fn context_from_args(v: &Value) -> MeetingContext {
             .filter(|s| !s.title.is_empty())
             .collect(),
         gathered: None,
+        event: None,
     }
 }
 

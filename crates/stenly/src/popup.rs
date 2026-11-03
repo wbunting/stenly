@@ -24,6 +24,10 @@ pub enum PopupKind {
 pub struct Popup {
     kind: PopupKind,
     controller: Entity<Controller>,
+    /// Pre-meeting brief, shortened, for a calendar prompt.
+    brief: Option<String>,
+    /// No brief because Context is off: say how to turn it on (once, ever).
+    hint: bool,
     _dismiss: Task<()>,
 }
 
@@ -33,6 +37,11 @@ const NOTE_READY_SECS: u64 = 25;
 
 const W: f32 = 360.;
 const H: f32 = 124.;
+/// Taller when the prompt carries a two-line brief or the one-time hint.
+const H_BRIEF: f32 = 168.;
+const H_HINT: f32 = 148.;
+/// Longest brief shown in the prompt (two lines).
+const BRIEF_CHARS: usize = 100;
 
 pub fn show(kind: PopupKind, controller: Entity<Controller>, shell: &dyn DesktopShell, cx: &mut App) {
     // One corner prompt at a time: a note-ready nudge must never cover the
@@ -54,8 +63,24 @@ pub fn show(kind: PopupKind, controller: Entity<Controller>, shell: &dyn Desktop
             point(b.origin.x + b.size.width - px(W + 16.), b.origin.y + px(12.))
         })
         .unwrap_or(point(px(80.), px(40.)));
+    // The brief gathered ahead of a calendar meeting, if any. Context off: a
+    // one-time hint instead. Both are tiny reads, done before the window opens
+    // so it never resizes.
+    let (brief, hint) = match &kind {
+        PopupKind::Start(Prompt::Upcoming(e)) => {
+            let enabled = controller.read(cx).config.context.enabled;
+            let brief = stenly_core::context::find_for_event(e).filter(|c| enabled && c.is_briefable()).map(|c| c.short_brief(BRIEF_CHARS)).filter(|b| !b.is_empty());
+            let hint = !enabled && !stenly_core::context::hint_seen();
+            if hint {
+                stenly_core::context::mark_hint_seen();
+            }
+            (brief, hint)
+        }
+        _ => (None, false),
+    };
+    let height = if brief.is_some() { H_BRIEF } else if hint { H_HINT } else { H };
     let opts = WindowOptions {
-        window_bounds: Some(WindowBounds::Windowed(Bounds { origin, size: size(px(W), px(H)) })),
+        window_bounds: Some(WindowBounds::Windowed(Bounds { origin, size: size(px(W), px(height)) })),
         titlebar: None,
         focus: false,
         show: true,
@@ -94,7 +119,7 @@ pub fn show(kind: PopupKind, controller: Entity<Controller>, shell: &dyn Desktop
                     window.remove_window();
                 });
             });
-            Popup { kind, controller, _dismiss: dismiss }
+            Popup { kind, controller, brief, hint, _dismiss: dismiss }
         })
     });
     if let Err(e) = res {
@@ -287,6 +312,51 @@ impl Render for Popup {
             }
         };
         let _ = cx;
+        // Brief (or the one-time hint) under the title; "View brief" opens the meeting's card.
+        let mut view_brief: Option<gpui::AnyElement> = None;
+        let brief_row: Option<gpui::AnyElement> = match (&self.kind, &self.brief, self.hint) {
+            (PopupKind::Start(Prompt::Upcoming(e)), Some(text), _) => {
+                let (ev, ctrl) = (e.clone(), self.controller.clone());
+                view_brief = Some(
+                    div()
+                        .id("view-brief")
+                        .flex_shrink_0()
+                        .text_size(px(theme::BODY))
+                        .line_height(px(16.))
+                        .text_color(theme::accent_text())
+                        .cursor_pointer()
+                        .child("View brief")
+                        .on_click(move |_, window, cx| {
+                            open_brief(&ctrl, &ev, cx);
+                            window.remove_window();
+                        })
+                        .into_any_element(),
+                );
+                Some(div().text_size(px(theme::CALLOUT)).line_height(px(16.)).text_color(theme::text()).line_clamp(2).child(text.clone()).into_any_element())
+            }
+            (PopupKind::Start(_), None, true) => {
+                let ctrl = self.controller.clone();
+                Some(
+                    div()
+                        .id("brief-hint")
+                        .flex()
+                        .items_center()
+                        .gap(px(8.))
+                        .text_size(px(theme::CALLOUT))
+                        .line_height(px(16.))
+                        .text_color(theme::muted())
+                        .cursor_pointer()
+                        .child(div().flex_1().min_w_0().truncate().child("Get a brief before each call."))
+                        .child(div().flex_shrink_0().text_color(theme::accent_text()).child("Turn on"))
+                        .on_click(move |_, window, cx| {
+                            crate::main_window::open(ctrl.clone(), Some(crate::main_window::Page::Context), cx);
+                            window.remove_window();
+                        })
+                        .into_any_element(),
+                )
+            }
+            _ => None,
+        };
         div()
             .size_full()
             .p(px(12.))
@@ -315,10 +385,26 @@ impl Render for Popup {
                             .min_w_0()
                             .gap(px(1.))
                             .child(div().text_size(px(theme::BODY)).font_weight(FontWeight::SEMIBOLD).truncate().child(heading))
-                            .child(div().text_size(px(theme::BODY)).line_height(px(16.)).text_color(theme::muted()).line_clamp(2).child(sub)),
+                            .child(
+                                div()
+                                    .flex()
+                                    .items_baseline()
+                                    .gap(px(8.))
+                                    .child(div().min_w_0().text_size(px(theme::BODY)).line_height(px(16.)).text_color(theme::muted()).line_clamp(2).child(sub))
+                                    .children(view_brief),
+                            ),
                     ),
             )
+            .children(brief_row)
             .child(div().flex().gap(px(8.)).justify_end().children(actions))
+    }
+}
+
+/// Open the main window on the Meetings page with this event's card (its brief).
+fn open_brief(controller: &Entity<Controller>, ev: &stenly_core::calendar::CalendarEvent, cx: &mut App) {
+    if let Some(h) = crate::main_window::open(controller.clone(), Some(crate::main_window::Page::Home), cx) {
+        let ev = ev.clone();
+        let _ = h.update(cx, |w, window, cx| w.show_event_card(ev, window, cx));
     }
 }
 

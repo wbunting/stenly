@@ -190,8 +190,16 @@ enum ContextCmd {
         #[arg(long)]
         process: bool,
     },
-    /// Gather context for the next calendar meeting (prints it; writes nothing).
-    Next,
+    /// Show the pre-meeting brief for the next calendar meeting: what the context agent
+    /// gathered ahead of it, plus the last meeting's action items. Reads only; never calls a model.
+    Next {
+        /// No brief yet? Run the context agent now and save the result (the app does the same N minutes before).
+        #[arg(long)]
+        gather: bool,
+        /// Look this many hours ahead.
+        #[arg(long, default_value_t = 24)]
+        hours: i64,
+    },
     /// Show a session's context and the summary prompt block made from it.
     Show { session: String },
     /// List context sources and the tools each offers.
@@ -756,15 +764,38 @@ fn context_cmd(cfg: &Config, c: ContextCmd) -> Result<()> {
                 run_process(cfg, &dir)?;
             }
         }
-        ContextCmd::Next => {
+        ContextCmd::Next { gather, hours } => {
             let now = chrono::Utc::now();
-            let (events, _) = stenly_core::calendar::upcoming(&cfg.calendar, now - chrono::Duration::minutes(30), now + chrono::Duration::hours(24));
-            let ev = events.into_iter().find(|e| !e.declined).context("no meeting in the next 24 hours")?;
-            eprintln!("gathering context for “{}” ({})…", ev.title, ev.start.with_timezone(&chrono::Local).format("%a %H:%M"));
-            let seed = stenly_agent::seed_for_event(cfg, Some(&ev));
-            let scope = stenly_agent::tools::Scope { before: Some(ev.start.with_timezone(&chrono::Local)), ..Default::default() };
-            let ctx = stenly_agent::gather(cfg, &seed, &scope, &mut print_agent_event);
-            print_context(&ctx);
+            // same view of the calendar as the app's Coming Up list
+            let (events, _) = stenly_core::calendar::upcoming(&cfg.calendar, now - chrono::Duration::minutes(30), now + chrono::Duration::hours(hours.clamp(1, 336)));
+            let ev = stenly_core::context::next_meeting(&events, now).cloned().with_context(|| format!("no meeting in the next {hours} hours"))?;
+            let when = ev.start.with_timezone(&chrono::Local).format("%a %H:%M");
+            let mut brief = stenly_core::context::brief_for_event(&ev, &paths.audio_dir);
+            if brief.is_none() && gather {
+                eprintln!("gathering context for “{}” ({when})…", ev.title);
+                let seed = stenly_agent::seed_for_event(cfg, Some(&ev));
+                let scope = stenly_agent::tools::Scope { before: Some(ev.start.with_timezone(&chrono::Local)), ..Default::default() };
+                let ctx = stenly_agent::gather(cfg, &seed, &scope, &mut print_agent_event);
+                stenly_core::context::save_for_calendar_event(&ev, &ctx)?;
+                brief = stenly_core::context::brief_for_event(&ev, &paths.audio_dir);
+                if brief.is_none() {
+                    print_context(&ctx);
+                }
+            }
+            match brief {
+                Some(b) => {
+                    println!("{}", serde_json::to_string_pretty(&serde_json::json!({ "meeting": ev.title, "start": ev.start.with_timezone(&chrono::Local).to_rfc3339(), "brief": b }))?);
+                }
+                None => {
+                    eprintln!("no brief for “{}” ({when}) yet.", ev.title);
+                    if !cfg.context.enabled {
+                        eprintln!("Context gathering is off. Turn it on in Settings → Context (or `[context] enabled = true`), or run with --gather.");
+                    } else {
+                        eprintln!("The app gathers it {} min before the meeting. Run with --gather to do it now.", cfg.context.before_mins);
+                    }
+                    std::process::exit(1);
+                }
+            }
         }
         ContextCmd::Show { session } => {
             let dir = stenly_core::recipe::resolve_session(&paths.audio_dir, &session)?;
