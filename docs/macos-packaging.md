@@ -55,6 +55,17 @@ then also set `STENLY_NOTARY_PROFILE=your-profile`. An optional
 `STENLY_NOTARY_KEYCHAIN` selects its keychain. Notarytool/stapling errors stop the
 script; identity validation alone does not prove notarization succeeded.
 
+## Update notifications
+
+An official build (`STENLY_REQUIRE_DEVELOPER_ID=1` or `STENLY_ENFORCE_LICENSE=1`)
+compiles in `STENLY_RELEASE_REPOSITORY=wbunting/stenly`, so the app checks GitHub
+Releases for a newer stable version and tells the user (notification only; it
+never installs). It also makes update checks default to on for that build; a user
+who turned them off stays off. Override with
+`STENLY_RELEASE_REPOSITORY=OWNER/REPO`, or set it to an empty string to build
+without checks. Ad-hoc/source builds have no default. Details:
+`scripts/updater/README.md`.
+
 ## Replacing an installed app (only when authorized)
 
 ```sh

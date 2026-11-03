@@ -23,6 +23,9 @@ mod real {
         status: MenuItem,
         toggle: MenuItem,
         recording: bool,
+        menu: Menu,
+        update: MenuItem,
+        update_shown: bool,
     }
 
     /// Draw the icon at runtime (no assets): a ring when idle, a filled red dot when recording.
@@ -59,6 +62,8 @@ mod real {
             let open = MenuItem::new("Open Stenly…", true, None);
             let notes = MenuItem::new("Open notes folder", true, None);
             let quit = MenuItem::new("Quit Stenly", true, None);
+            // Not in the menu until a newer release is found (see set_update).
+            let update = MenuItem::new("Update available", true, None);
             let menu = Menu::new();
             menu.append(&status)?;
             menu.append(&PredefinedMenuItem::separator())?;
@@ -71,7 +76,7 @@ mod real {
             menu.append(&PredefinedMenuItem::separator())?;
             menu.append(&quit)?;
 
-            let ids = (toggle.id().clone(), open.id().clone(), notes.id().clone(), quit.id().clone(), dictate.id().clone(), history.id().clone(), status.id().clone());
+            let ids = (toggle.id().clone(), open.id().clone(), notes.id().clone(), quit.id().clone(), dictate.id().clone(), history.id().clone(), status.id().clone(), update.id().clone());
             let toggle_state = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             let ts = toggle_state.clone();
             MenuEvent::set_event_handler(Some(move |e: MenuEvent| {
@@ -89,6 +94,8 @@ mod real {
                     TrayCommand::OpenDictations
                 } else if e.id == ids.6 {
                     TrayCommand::OpenNextMeeting
+                } else if e.id == ids.7 {
+                    TrayCommand::OpenUpdate
                 } else {
                     return;
                 };
@@ -104,9 +111,9 @@ mod real {
             let builder = builder.with_icon(icon(false));
             let icon = builder
                 .with_tooltip("Stenly")
-                .with_menu(Box::new(menu))
+                .with_menu(Box::new(menu.clone()))
                 .build()?;
-            Ok(Self { icon, status, toggle, recording: false })
+            Ok(Self { icon, status, toggle, recording: false, menu, update, update_shown: false })
         }
     }
 
@@ -118,6 +125,23 @@ mod real {
             self.icon.set_title(title.map(|t| format!(" {t}")));
             #[cfg(not(target_os = "macos"))]
             let _ = self.icon.set_tooltip(Some(title.unwrap_or("Stenly")));
+        }
+
+        fn set_update(&mut self, version: Option<&str>) {
+            match version {
+                Some(v) => {
+                    self.update.set_text(format!("Update available: {v}"));
+                    if !self.update_shown {
+                        // Right under the status line, above the first separator.
+                        self.update_shown = self.menu.insert(&self.update, 1).is_ok();
+                    }
+                }
+                None if self.update_shown => {
+                    let _ = self.menu.remove(&self.update);
+                    self.update_shown = false;
+                }
+                None => {}
+            }
         }
 
         fn set_state(&mut self, state: &TrayState) {

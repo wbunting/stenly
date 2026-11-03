@@ -310,7 +310,11 @@ pub struct AppConfig {
     pub show_next_in_menubar: bool,
     /// Start stenly when you log in.
     pub launch_at_login: bool,
-    /// Opt-in release checks; no effect until a signed update feed is bundled.
+    /// Check GitHub Releases for a newer version and tell you about it
+    /// (notification only; nothing is downloaded or installed). Absent from the
+    /// file = the build's default: on in official release builds (those compiled
+    /// with `STENLY_RELEASE_REPOSITORY`), off in source builds. A saved `false`
+    /// always stays off.
     pub check_updates: bool,
     /// Where "Join Google Meet" opens: the default browser, or the installed
     /// Google Meet web app (macOS; falls back to the browser without one).
@@ -319,7 +323,7 @@ pub struct AppConfig {
 
 impl Default for AppConfig {
     fn default() -> Self {
-        Self { onboarded: false, show_next_in_menubar: true, launch_at_login: false, check_updates: false, meet_links: Default::default() }
+        Self { onboarded: false, show_next_in_menubar: true, launch_at_login: false, check_updates: crate::update::checks_default_on(), meet_links: Default::default() }
     }
 }
 
@@ -876,6 +880,10 @@ pub fn default_config_toml() -> String {
 onboarded = false
 show_next_in_menubar = true
 launch_at_login = false
+# Look for new versions on GitHub Releases and show a notice (nothing is ever
+# downloaded or installed for you). Left out here, it is on in official release
+# builds and off in source builds; set true or false to choose.
+# check_updates = false
 # Where "Join Google Meet" opens: "browser" (default) or "app" (the installed
 # Google Meet web app, macOS; falls back to the browser if there isn't one).
 meet_links = "browser"
@@ -1083,6 +1091,18 @@ mod tests {
         assert!(text.contains("# mine") && text.contains("# keep"), "{text}");
         let cfg = replace_tables::<McpServerConfig>(&p, &["context", "servers"], &[]).unwrap();
         assert!(cfg.context.servers.is_empty() && cfg.context.enabled);
+    }
+
+    #[test]
+    fn update_checks_follow_the_build_but_a_saved_choice_wins() {
+        // Absent key: whatever this build defaults to.
+        let absent: Config = toml::from_str("[app]\nonboarded = true\n").unwrap();
+        assert_eq!(absent.app.check_updates, crate::update::checks_default_on());
+        // Explicit choices are honoured regardless of the build default.
+        let off: Config = toml::from_str("[app]\ncheck_updates = false\n").unwrap();
+        assert!(!off.app.check_updates);
+        let on: Config = toml::from_str("[app]\ncheck_updates = true\n").unwrap();
+        assert!(on.app.check_updates);
     }
 
     #[test]

@@ -1,7 +1,8 @@
-# Optional release notifications and installer experiment
+# Release notifications and installer experiment
 
-**This experiment is not complete. Production is notification-only and unconfigured.**
-No public repository/feed/key is guessed; release packaging is owned separately.
+**In-app installation is not complete and stays blocked. Production is notification-only.**
+Official builds notify through GitHub Releases (see below); no feed/key is guessed
+for source builds, and Sparkle is not configured in release builds.
 Normal Cargo builds never compile the experimental installation driver and call
 only Sparkle's `checkForUpdateInformation` probing API. Automatic Sparkle checks,
 downloads, installation and relaunch are off, even when opt-in checking is on.
@@ -22,15 +23,46 @@ proof that archive bytes were downloaded or signature-validated.
   `SUAllowsAutomaticUpdates=false`, `SUSendProfileInfo=false`, and
   `SUVerifyUpdateBeforeExtraction=true`. No production ATS dictionary is allowed.
   The delegate pins validated bundled feed over persisted defaults overrides.
-- `app.check_updates` defaults false. Requests expose IP and user agent to the
-  feed host, never meeting content or system profile. Disabling clears results;
+- Requests expose IP and user agent to the feed host, never meeting content or
+  system profile. (`app.check_updates` defaults are described under "GitHub
+  Releases notifications" below; the Sparkle path stays opt-in.) Disabling clears results;
   there is no queued restart that can override a later disable. Turning off
   stops NEW checks; an already-started metadata request (including redirects)
   may finish. Its result is suppressed while disabled. This is not immediate
   network revocation; no stronger cancellation guarantee is claimed.
-- Linux build-time `STENLY_RELEASE_REPOSITORY=OWNER/REPO` deliberately chooses
-  real stable GitHub Releases metadata. HTTPS-only requests, notification/link
-  only. No implicit private repo or invented public name.
+
+## GitHub Releases notifications (macOS and Linux)
+
+Build-time `STENLY_RELEASE_REPOSITORY=OWNER/REPO` (validated in
+`crates/stenly-core/build.rs`) chooses real stable GitHub Releases metadata.
+HTTPS-only (15 s timeout), notification/link only; nothing is downloaded or
+installed. Drafts, prereleases and non-semver tags are ignored, the version must
+be newer than the running one, and only `https://github.com/OWNER/REPO/releases/tag/`
+links are accepted. Logic and tests: `stenly_core::update::evaluate`; I/O and
+scheduling: `crates/stenly/src/updates.rs` (30 s after launch, then every 6 h,
+only while enabled and not recording/dictating).
+
+- **One path for both OSes.** On macOS the native Sparkle probe is used only
+  when it is configured (`stenly_platform::updater::start() == 1`, i.e.
+  `STENLY_SPARKLE_FRAMEWORK_DIR` at build time). Otherwise, if the repository is
+  set, macOS uses the same GitHub check as Linux. The Sparkle gate above is untouched.
+- **Official builds set it.** `scripts/bundle-macos.sh` defaults it to
+  `wbunting/stenly` when `STENLY_REQUIRE_DEVELOPER_ID=1` or
+  `STENLY_ENFORCE_LICENSE=1`; the env var overrides it (empty string = none).
+  `.github/workflows/release.yml` sets it for the macOS and Linux jobs (repository
+  variable `STENLY_RELEASE_REPOSITORY` overrides). Source/dev builds have no
+  default repository and never contact GitHub.
+- **Default.** `app.check_updates` is on by default only in a build compiled with
+  a release repository; otherwise off. A saved `check_updates = true|false` in
+  config always wins, so a user who turned it off stays off. The wording in
+  Settings → General → Updates and `site/content/privacy.md` says plainly that
+  it contacts api.github.com and sends the IP and `Stenly/<version>` user agent.
+- **Notice.** A found release shows in Settings (status + "View release"), a
+  one-time toast per version (recorded in `<data dir>/update-announced`) and a
+  menubar item "Update available: vX" that opens the release page.
+- **Testing a lower version.** Debug builds only honour
+  `STENLY_UPDATE_CURRENT_VERSION=0.1.0` to pretend to be older. Release builds
+  ignore it.
 
 ## Why production installation is blocked
 

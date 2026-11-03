@@ -25,6 +25,22 @@ fn main() {
             println!("cargo:rustc-env={var}={}", v.trim());
         }
     }
+    // GitHub Releases source for update notifications (OWNER/REPO). Official
+    // release builds set it; source/dev builds deliberately have no default.
+    // It also turns update checks on by default (see AppConfig).
+    println!("cargo:rerun-if-env-changed=STENLY_RELEASE_REPOSITORY");
+    if let Ok(repo) = std::env::var("STENLY_RELEASE_REPOSITORY")
+        && !repo.is_empty()
+    {
+        let parts: Vec<_> = repo.split('/').collect();
+        assert!(
+            parts.len() == 2
+                && parts.iter().all(|p| !p.is_empty()
+                    && p.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')),
+            "Expected GitHub OWNER/REPO"
+        );
+        println!("cargo:rustc-env=STENLY_RELEASE_REPOSITORY={repo}");
+    }
     println!("cargo:rustc-check-cfg=cfg(stenly_enforce_license)");
     if std::env::var("STENLY_ENFORCE_LICENSE").as_deref() == Ok("1") {
         // A gate with no way to buy or activate would lock users out.

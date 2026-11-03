@@ -6313,6 +6313,7 @@ dependencies = [
  "libc",
  "regex",
  "rrule",
+ "semver",
  "serde",
  "serde_json",
  "sha2",

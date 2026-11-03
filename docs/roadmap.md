@@ -23,7 +23,7 @@ Stenly is a local-first meeting recorder and dictation app. The roadmap below de
 
 - A Linux release (today Linux is built from source).
 - Importing audio or video files for a transcript or a full note.
-- In-app update installation. The updater is notification-only today, and the v0.1.2 macOS build has no update feed configured.
+- In-app update installation. Update notification (a GitHub Releases check in official builds) ships from the release after v0.1.2; installation stays manual.
 
 ## Not planned
 

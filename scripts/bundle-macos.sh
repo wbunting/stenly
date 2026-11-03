@@ -22,6 +22,13 @@
 # the https checkout page the Buy button opens and STENLY_POLAR_ORG_ID the Polar
 # organization the app activates keys against. Both are public, not secrets.
 #
+# STENLY_RELEASE_REPOSITORY=OWNER/REPO is the GitHub repository whose stable
+# Releases the app checks to tell users a newer version exists (notification
+# only; nothing is installed). An official build (STENLY_REQUIRE_DEVELOPER_ID=1
+# or STENLY_ENFORCE_LICENSE=1) defaults to wbunting/stenly; set the variable to
+# another repository to override it, or to an empty string to build without
+# checks. Source and ad-hoc development builds have no default repository.
+#
 # The DMG gets the standard install layout (Stenly.app, an /Applications link, a
 # fixed icon-view window and a background arrow) from a .DS_Store written by
 # dmgbuild (MIT), pinned in scripts/requirements-dmg.txt and installed into
@@ -145,6 +152,16 @@ if [[ "${STENLY_ENFORCE_LICENSE:-0}" == "1" ]]; then
 else
   # A stray value in the environment must not leak into a source-style bundle.
   unset STENLY_ENFORCE_LICENSE STENLY_CHECKOUT_URL STENLY_POLAR_ORG_ID STENLY_POLAR_API
+fi
+
+# Update notifications: official builds know where to look; nothing else guesses.
+if [[ "${STENLY_ENFORCE_LICENSE:-0}" == "1" || "$REQUIRE_DEVELOPER_ID" == "1" ]]; then
+  export STENLY_RELEASE_REPOSITORY="${STENLY_RELEASE_REPOSITORY-wbunting/stenly}"
+fi
+if [[ -n "${STENLY_RELEASE_REPOSITORY:-}" ]]; then
+  echo "Update notifications will check GitHub Releases for ${STENLY_RELEASE_REPOSITORY}."
+else
+  unset STENLY_RELEASE_REPOSITORY
 fi
 
 mkdir -p "$DIST_DIR"

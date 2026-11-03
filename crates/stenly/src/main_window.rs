@@ -69,6 +69,8 @@ pub struct MainWindow {
     /// Brief status notice in the bottom-right corner ("Copied").
     toast: Option<crate::toast::Toast>,
     toast_seq: u64,
+    /// "Version vX is available" notice with a View release button: (id, version, url).
+    update_toast: Option<(u64, String, String)>,
     /// One encrypted share upload or revoke is in flight for the open meeting.
     sharing: bool,
     /// The meeting just moved to the Trash (its new folder), for Undo.
@@ -505,6 +507,17 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                     }));
                     let mut previous_revision = controller.read(cx).library_revision;
                     subs.push(cx.observe(&controller, move |this: &mut MainWindow, ctrl, cx| {
+                        let pending = ctrl.read(cx).update_notice_pending;
+                        if pending {
+                            let c = ctrl.read(cx);
+                            if let (Some(version), Some(url)) = (c.update_available.clone(), c.update_download.clone()) {
+                                // Once per version; the observer's borrow ends before the controller changes.
+                                stenly_core::update::mark_announced(&version);
+                                let ctrl = ctrl.clone();
+                                cx.defer(move |cx| ctrl.update(cx, |c, _| c.update_notice_pending = false));
+                                this.show_update_toast(version, url, cx);
+                            }
+                        }
                         let revision = ctrl.read(cx).library_revision;
                         if revision != previous_revision {
                             previous_revision = revision;
@@ -559,6 +572,7 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                         card_hint: false,
                         toast: None,
                         toast_seq: 0,
+                        update_toast: None,
                         sharing: false,
                         undo_trash: None,
                         trash,
@@ -1343,6 +1357,43 @@ impl MainWindow {
         self.notify_toast(msg, kind, cx);
     }
 
+    /// "Version vX is available" with View release. Non-blocking, in the toast
+    /// stack; it fades on its own and Settings → Updates keeps the link.
+    pub(crate) fn show_update_toast(&mut self, version: String, url: String, cx: &mut Context<Self>) {
+        self.toast_seq += 1;
+        let id = self.toast_seq;
+        self.update_toast = Some((id, version, url));
+        cx.notify();
+        cx.spawn(async move |this, cx| {
+            cx.background_executor().timer(std::time::Duration::from_secs(if crate::toast::hold() { 600 } else { 15 })).await;
+            let _ = this.update(cx, |this, cx| {
+                if this.update_toast.as_ref().is_some_and(|t| t.0 == id) {
+                    this.update_toast = None;
+                    cx.notify();
+                }
+            });
+        })
+        .detach();
+    }
+
+    fn update_toast_card(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
+        let (id, version, url) = self.update_toast.clone()?;
+        let view = ui::button("update-toast-view", "View release", Btn::Ghost).on_click(cx.listener(move |this, _, _, cx| {
+            tracing::info!(%url, "opening release page");
+            cx.open_url(&url);
+            this.update_toast = None;
+            cx.notify();
+        }));
+        let trailing = view.into_any_element();
+        let card = crate::toast::card(
+            gpui::ElementId::NamedInteger("toast-update".into(), id),
+            Some(icons::icon(icons::DOWNLOAD, 12., theme::muted())),
+            format!("Update available: {version}").into(),
+            Some(trailing),
+        );
+        Some(crate::toast::animated(card, id, false))
+    }
+
     /// A failure notice, shown a little longer with a warning glyph.
     pub(crate) fn flash_error(&mut self, msg: impl Into<SharedString>, cx: &mut Context<Self>) {
         self.notify_toast(msg.into(), crate::toast::ToastKind::Error, cx);
@@ -1381,7 +1432,7 @@ impl MainWindow {
     /// latest notice. Overlaid on the content so nothing in the toolbar moves.
     fn toast_stack(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
         let sending = self.dest_ui.read(cx).sending_label(cx);
-        if self.undo_trash.is_none() && sending.is_none() && self.toast.is_none() {
+        if self.undo_trash.is_none() && sending.is_none() && self.toast.is_none() && self.update_toast.is_none() {
             return None;
         }
         Some(
@@ -1396,6 +1447,7 @@ impl MainWindow {
                 .when(self.undo_trash.is_some(), |d| d.child(self.undo_trash_toast(cx)))
                 .when_some(sending, |d, n| d.child(crate::toast::pending(format!("Sending to {n}…").into())))
                 .when_some(self.toast.as_ref(), |d, t| d.child(crate::toast::render(t)))
+                .when_some(self.update_toast_card(cx), |d, t| d.child(t))
                 .into_any_element(),
         )
     }
@@ -2192,17 +2244,17 @@ impl MainWindow {
             ]))
             .child(ui::caption("Updates"))
             .child(ui::card(vec![
-                ui::row(None, "Release notifications", Some("Notification-only; no in-app installation. No meeting content or system profile is sent. Turning off stops new checks; requests already started may finish.".into()), {
+                ui::row(None, "Release notifications", Some("Tells you when a newer version is out; it never downloads or installs anything. Checking contacts api.github.com (GitHub Releases) and sends your IP address and a user agent with the app version, never meeting content or a system profile. Turning off stops new checks; a request already started may finish.".into()), {
                     let ctrl = ctrl.clone();
                     let on = cfg.app.check_updates;
                     ui::toggle("updates", on, move |_, _, cx| ctrl.update(cx, |c, cx| c.set("app.check_updates", !on, cx)))
                         .role(gpui::Role::Switch).aria_label("Release notifications").aria_toggled(if on { gpui::Toggled::True } else { gpui::Toggled::False })
                 }).into_any_element(),
-                ui::row(None, "Installed version", Some(format!("{} · {}", env!("CARGO_PKG_VERSION"), c.update_status).into()), {
+                ui::row(None, "Installed version", Some(format!("{} · {}", stenly_core::update::current_version(), c.update_status).into()), {
                     let ctrl = ctrl.clone();
                     let download = c.update_download.clone();
                     if let Some(url) = download {
-                        ui::button("update-download", "View release", Btn::Ghost).on_click(move |_, _, cx| cx.open_url(&url)).into_any_element()
+                        ui::button("update-download", "View release", Btn::Ghost).on_click(move |_, _, cx| { tracing::info!(%url, "opening release page"); cx.open_url(&url) }).into_any_element()
                     } else {
                         ui::button("check-updates", "Check now", Btn::Ghost).role(gpui::Role::Button).aria_label("Check now").on_click(move |_, _, cx| crate::updates::check(ctrl.clone(), cx)).into_any_element()
                     }

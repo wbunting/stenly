@@ -52,6 +52,8 @@ if name == 'codesign':
             sys.exit(1)
     sys.exit(0)
 if name == 'cargo':
+    with open(root / 'cargo-env.jsonl', 'a') as envlog:
+        envlog.write(json.dumps(os.environ.get('STENLY_RELEASE_REPOSITORY')) + '\n')
     target = 'target/release'
     if '--target' in args:
         target = 'target/' + args[args.index('--target') + 1] + '/release'
@@ -296,6 +298,29 @@ class BundleTests(unittest.TestCase):
         self.assertEqual(self.run_bundle(**self.valid(STENLY_REQUIRE_DEVELOPER_ID="1", STENLY_NOTARY_PROFILE="fixture-profile", STENLY_NOTARY_KEYCHAIN="fixture-keychain", STENLY_UNIVERSAL="1")), 0, self.result.stderr)
         self.assertTrue(any(c[0] == "xcrun" and "submit" in c and "fixture-keychain" in c for c in self.commands))
         self.assertTrue(any(c[0] == "lipo" and c[-1].endswith("stenly-speech") for c in self.commands))
+
+    def release_repos(self):
+        log = self.root / "cargo-env.jsonl"
+        return [json.loads(line) for line in log.read_text().splitlines()] if log.exists() else []
+
+    def test_official_builds_default_the_release_repository_and_dev_builds_do_not(self):
+        # Official (Developer ID) build: defaults to the public repository.
+        self.assertEqual(self.run_bundle(**self.valid(STENLY_REQUIRE_DEVELOPER_ID="1")), 0, self.result.stderr)
+        self.assertEqual(set(self.release_repos()), {"wbunting/stenly"})
+        # Overridable by the environment.
+        (self.root / "cargo-env.jsonl").unlink()
+        self.assertEqual(self.run_bundle(**self.valid(STENLY_REQUIRE_DEVELOPER_ID="1", STENLY_RELEASE_REPOSITORY="example/fork")), 0, self.result.stderr)
+        self.assertEqual(set(self.release_repos()), {"example/fork"})
+        # An explicit empty value turns it off even for an official build.
+        (self.root / "cargo-env.jsonl").unlink()
+        self.assertEqual(self.run_bundle(**self.valid(STENLY_REQUIRE_DEVELOPER_ID="1", STENLY_RELEASE_REPOSITORY="")), 0, self.result.stderr)
+        self.assertEqual(set(self.release_repos()), {None})
+        # Ad-hoc development build: no default.
+        (self.root / "cargo-env.jsonl").unlink()
+        for key in ["STENLY_RELEASE_REPOSITORY", "STENLY_REQUIRE_DEVELOPER_ID", "STENLY_SIGN_IDENTITY"]:
+            self.env.pop(key, None)
+        self.assertEqual(self.run_bundle(), 0, self.result.stderr)
+        self.assertEqual(set(self.release_repos()), {None})
 
     def test_candidate_staging_and_swap_failures_keep_old_app_running(self):
         for env in [dict(COPY_FAIL="1"), dict(VERIFY_FAIL="candidate"), dict(VERIFY_FAIL="staged"), dict(SWAP_FAIL="1")]:

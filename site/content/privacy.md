@@ -9,14 +9,14 @@ contact_intro = "Questions about privacy, or a request about data that you belie
 
 # Privacy policy
 
-<p class="updated">Last updated 2 November 2026</p>
+<p class="updated">Last updated 3 November 2026</p>
 
 Stenly is a local-first meeting recorder and dictation app. This page says what stays on your Mac, what can leave it, and who gets it when it does. It covers the Stenly desktop app, its command-line tools, this website (stenly.ai) and the default share service at share.stenly.ai.
 
 ## The short version
 
 - Recordings, transcripts, voiceprints and notes stay on your Mac. Speech is turned into text on your device with the Parakeet model.
-- Nothing in this list happens until you turn it on or choose it: AI summaries from an outside provider, Google Calendar sign-in, encrypted share links, Notion, Slack and webhook destinations, and update checks.
+- Nothing in this list happens until you turn it on or choose it: AI summaries from an outside provider, Google Calendar sign-in, encrypted share links, Notion, Slack and webhook destinations. The one exception is the update check in official release builds, which is on by default and can be turned off (see "Update checks" below).
 - We (the people who make Stenly) do not receive your recordings, transcripts, notes, calendar data or voiceprints. There is no Stenly account and no Stenly server that holds them.
 - Stenly has no analytics and no crash reporting. This website has no analytics, no tracking scripts and no cookies of its own.
 
@@ -110,7 +110,7 @@ Source builds have no licence check and make no licence requests.
 
 ### Update checks
 
-Update checks are **off by default**. If you turn them on, Stenly asks a release server whether a newer version exists. The request contains what any web request does: your IP address and a user-agent that identifies the app. It sends no meeting content and no system profile. Stenly only tells you a newer version exists and links to it. It does not install anything for you. The current macOS release has no update feed set up, so this setting does nothing there yet; new versions are on the [releases page](https://github.com/wbunting/stenly/releases/latest).
+Official release builds of Stenly (macOS and Linux) check for new versions **by default**; you can turn this off in Settings → General → Release notifications, and if you do it stays off. Builds you compile yourself have no release source and never check. A check is one HTTPS request to GitHub (api.github.com) for the latest release of the Stenly repository, about 30 seconds after launch and then every 6 hours while Stenly is open, but not while a recording or dictation is in progress. The request contains what any web request does: your IP address and a user-agent that includes the Stenly version (for example "Stenly/0.1.3"). It sends no meeting content, no account and no system profile. GitHub can see the request under its own privacy statement. If a newer release exists, Stenly shows a notice once per version, a menu bar item and a link to its release page. It never downloads or installs anything for you. Versions before 0.1.3 do not check; new versions are always on the [releases page](https://github.com/wbunting/stenly/releases/latest).
 
 ### Downloading speech models
 

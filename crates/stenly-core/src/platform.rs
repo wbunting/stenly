@@ -317,6 +317,8 @@ pub enum TrayCommand {
     /// Start (or stop) a dictation from the menu.
     ToggleDictation,
     OpenDictations,
+    /// The "Update available: vX" item: open the release page.
+    OpenUpdate,
     Quit,
 }
 
@@ -324,6 +326,8 @@ pub trait Tray {
     fn set_state(&mut self, state: &TrayState);
     /// Text next to the icon (macOS menubar title / SNI tooltip).
     fn set_title(&mut self, _title: Option<&str>) {}
+    /// Show (`Some("v0.1.3")`) or hide the "Update available" item.
+    fn set_update(&mut self, _version: Option<&str>) {}
 }
 
 #[cfg(test)]

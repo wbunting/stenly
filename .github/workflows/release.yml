@@ -58,6 +58,9 @@ jobs:
         run: scripts/bundle-macos.sh
         env:
           STENLY_UNIVERSAL: "1"
+          # Where the app looks for newer versions (notification only; it never
+          # installs). Overridable with a repository variable.
+          STENLY_RELEASE_REPOSITORY: ${{ vars.STENLY_RELEASE_REPOSITORY || 'wbunting/stenly' }}
           # The official signed app enforces the free trial and $10 licence.
           # Source builds never do. The checkout URL and licence-provider IDs
           # are public repository variables, not secrets.
@@ -110,6 +113,9 @@ jobs:
             pkg-config clang
       - name: Build portable release tarball
         run: scripts/bundle-linux.sh
+        env:
+          # Same notify-only GitHub Releases check as the macOS build.
+          STENLY_RELEASE_REPOSITORY: ${{ vars.STENLY_RELEASE_REPOSITORY || 'wbunting/stenly' }}
       - uses: actions/upload-artifact@v4
         with:
           name: stenly-linux
