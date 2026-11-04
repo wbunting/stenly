@@ -38,6 +38,23 @@ jobs:
       - name: Test portable crates
         run: cargo test -p stenly-core -p stenly-platform -p stenly-asr
 
+  launcher:
+    name: Raycast and Vicinae extension tests
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: extensions/raycast
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: extensions/raycast/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+
   site:
     name: Site tests
     runs-on: ubuntu-24.04

@@ -18,6 +18,7 @@ pub mod ics;
 pub mod google;
 pub mod identity;
 pub mod kody;
+pub mod keyboard_guard;
 pub mod library;
 pub mod license;
 pub mod oauth;

@@ -330,11 +330,25 @@ impl Hotkeys for MacHotkeys {
     fn set_capture_escape(&self, on: bool) {
         self.capture_escape.store(on, Ordering::Relaxed);
     }
+
+    fn reset_pressed(&self) {
+        if let Ok(mut shared) = self.shared.lock() {
+            shared.held.fill(false);
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn secure_input_recovery_forgets_hidden_releases() {
+        let keys = MacHotkeys::default();
+        keys.shared.lock().unwrap().held = vec![true, false, true];
+        keys.reset_pressed();
+        assert_eq!(keys.shared.lock().unwrap().held, vec![false, false, false]);
+    }
 
     #[test]
     fn key_codes() {

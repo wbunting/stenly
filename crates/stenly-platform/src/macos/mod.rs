@@ -9,6 +9,7 @@ pub mod hotkey;
 mod inject;
 mod mic_activity;
 pub mod screens;
+pub(crate) mod secure_input;
 pub(crate) mod shell;
 pub(crate) mod tap;
 

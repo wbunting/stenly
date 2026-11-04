@@ -28,6 +28,9 @@ impl MainWindow {
         let ax = c.permission(Permission::Accessibility);
         let dict = crate::dictation_entity();
         let hotkey_err = dict.as_ref().and_then(|e| e.read(cx).hotkeys_error.clone());
+        let shortcut_block = dict
+            .as_ref()
+            .and_then(|e| e.read(cx).keyboard_guard.current().cloned());
         let tog = |id: &'static str, key: &'static str, on: bool| {
             let ctrl = ctrl.clone();
             ui::toggle(id, on, move |_, _, cx| ctrl.update(cx, |c, cx| c.set(key, !on, cx))).into_any_element()
@@ -52,14 +55,25 @@ impl MainWindow {
 
         // Permission banner: without Accessibility nothing below works.
         let needs_ax = ax != PermissionState::Granted && ax != PermissionState::NotApplicable;
-        let banner: Option<AnyElement> = if needs_ax || hotkey_err.is_some() {
+        let banner: Option<AnyElement> = if needs_ax || hotkey_err.is_some() || shortcut_block.is_some()
+        {
             let ctrl2 = ctrl.clone();
-            let msg = if needs_ax {
-                "Stenly needs Accessibility access to hear your shortcut and type the text for you."
+            let msg = if let Some(block) = &shortcut_block {
+                block.title()
+            } else if needs_ax {
+                "Stenly needs Accessibility access to hear your shortcut and type the text for you.".to_string()
             } else {
-                "Shortcuts aren't active."
+                "Shortcuts aren't active.".into()
             };
-            let detail = hotkey_err.clone().filter(|_| !needs_ax).unwrap_or_default();
+            let detail = if let Some(block) = &shortcut_block {
+                let permission = if needs_ax { " Stenly also needs Accessibility access; choose Allow below." } else { "" };
+                format!("Secure Keyboard Entry is on. {}{permission}", block.guidance())
+            } else if needs_ax {
+                String::new()
+            } else {
+                hotkey_err.clone().unwrap_or_default()
+            };
+            let blocking_owner = shortcut_block.as_ref().and_then(|b| b.owner.clone());
             Some(
                 div()
                     .mt(px(16.))
@@ -83,6 +97,13 @@ impl MainWindow {
                     )
                     .when(needs_ax, |x| {
                         x.child(ui::button("ax-allow", "Allow…", Btn::Accent).on_click(move |_, _, cx| ctrl2.update(cx, |c, cx| c.request_permission(Permission::Accessibility, cx))))
+                    })
+                    .when_some(blocking_owner, |x, owner| {
+                        x.child(
+                            ui::button("show-shortcut-blocker", "Show blocking app", Btn::Ghost)
+                                .on_click(move |_, _, _| {
+                                    stenly_platform::show_shortcut_blocker(&owner)
+                                }))
                     })
                     .into_any_element(),
             )

@@ -159,6 +159,9 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                 crate::configure_native(window, controller.read(cx).shell.as_ref());
                 cx.new(|cx| {
                     let sub = cx.observe(&controller, |_: &mut MainWindow, _, cx| cx.notify());
+                    if let Some(dict) = crate::dictation_entity() {
+                        cx.observe(&dict, |_: &mut MainWindow, _, cx| cx.notify()).detach();
+                    }
                     let appearance = cx.observe_window_appearance(window, |_: &mut MainWindow, _, cx| {
                         theme::sync(cx);
                         cx.notify();

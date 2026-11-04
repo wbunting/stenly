@@ -28,6 +28,26 @@ pub use macos::hotkey::{has_access as hotkeys_allowed, post_key, post_right_comm
 #[cfg(target_os = "linux")]
 mod linux;
 
+/// Whether Secure Keyboard Entry is currently blocking global shortcuts.
+/// This is independent of Accessibility permissions and hotkey registration.
+pub fn shortcut_block() -> Option<stenly_core::keyboard_guard::ShortcutBlock> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::secure_input::status()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        None
+    }
+}
+
+pub fn show_shortcut_blocker(owner: &stenly_core::keyboard_guard::SecureInputOwner) {
+    #[cfg(target_os = "macos")]
+    macos::secure_input::show_owner(owner);
+    #[cfg(not(target_os = "macos"))]
+    let _ = owner;
+}
+
 pub struct Platform {
     pub name: &'static str,
     pub audio: Arc<dyn AudioBackend>,

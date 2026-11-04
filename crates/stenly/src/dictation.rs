@@ -33,6 +33,8 @@ pub enum Phase {
 pub enum DictationEvent {
     /// The HUD should appear / update / disappear.
     Changed,
+    /// Sustained Secure Keyboard Entry: one non-activating nudge per episode.
+    ShortcutBlocked(stenly_core::keyboard_guard::ShortcutBlock),
 }
 
 pub struct DictationController {
@@ -41,6 +43,8 @@ pub struct DictationController {
     level: Arc<AtomicU32>,
     pub hotkeys_error: Option<String>,
     pub last_error: Option<String>,
+    pub keyboard_guard: stenly_core::keyboard_guard::KeyboardGuard,
+    _keyboard_monitor: Task<()>,
     controller: Entity<Controller>,
     audio: Arc<dyn AudioBackend>,
     hotkeys: Arc<dyn Hotkeys>,
@@ -89,6 +93,48 @@ impl DictationController {
             level: Arc::new(AtomicU32::new(0)),
             hotkeys_error: None,
             last_error: None,
+            keyboard_guard: Default::default(),
+            _keyboard_monitor: cx.spawn(async move |this, cx: &mut AsyncApp| {
+                loop {
+                    // Native read-only APIs: no subprocess and no event-tap dependency.
+                    let block = cx
+                        .background_spawn(async { stenly_platform::shortcut_block() })
+                        .await;
+                    if this
+                        .update(cx, |this, cx| {
+                            let block =
+                                this.config(cx).dictation.enabled.then_some(block).flatten();
+                            let change = this.keyboard_guard.update(block, Instant::now());
+                            if change.changed {
+                                tracing::info!(blocked = this.keyboard_guard.current().is_some(), "dictation keyboard protection changed");
+                                // A release may have been hidden by Secure Input. Do not
+                                // leave the tap/hold state machine believing a key is held.
+                                this.states.iter_mut().for_each(ShortcutState::reset);
+                                this.hotkeys.reset_pressed();
+                                if this.keyboard_guard.current().is_some() {
+                                    if let Phase::Recording { since, .. } = this.phase {
+                                        this.phase = Phase::Recording {
+                                            since,
+                                            hands_free: true,
+                                        };
+                                    }
+                                }
+                                cx.emit(DictationEvent::Changed);
+                                cx.notify();
+                            }
+                            if change.notify {
+                                if let Some(block) = this.keyboard_guard.current() {
+                                    cx.emit(DictationEvent::ShortcutBlocked(block.clone()));
+                                }
+                            }
+                        })
+                        .is_err()
+                    {
+                        return;
+                    }
+                    cx.background_executor().timer(Duration::from_secs(1)).await;
+                }
+            }),
             controller: controller.clone(),
             audio,
             hotkeys,

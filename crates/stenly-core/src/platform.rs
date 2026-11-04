@@ -183,6 +183,8 @@ pub trait Hotkeys: Send + Sync {
     fn stop(&self) {}
     /// Whether Esc should be swallowed while a dictation is in progress.
     fn set_capture_escape(&self, _on: bool) {}
+    /// Forget presses whose release may have been hidden by OS keyboard protection.
+    fn reset_pressed(&self) {}
 }
 
 /// Puts text into whatever app has keyboard focus.
@@ -319,6 +321,8 @@ pub enum TrayCommand {
     OpenDictations,
     /// The "Update available: vX" item: open the release page.
     OpenUpdate,
+    ShowShortcutBlocker,
+    OpenDictationSettings,
     Quit,
 }
 
@@ -328,6 +332,7 @@ pub trait Tray {
     fn set_title(&mut self, _title: Option<&str>) {}
     /// Show (`Some("v0.1.3")`) or hide the "Update available" item.
     fn set_update(&mut self, _version: Option<&str>) {}
+    fn set_shortcut_block(&mut self, _block: Option<&crate::keyboard_guard::ShortcutBlock>) {}
 }
 
 #[cfg(test)]
