@@ -185,6 +185,29 @@ fn main() {
         let tray: Rc<std::cell::RefCell<Box<dyn Tray>>> = Rc::new(std::cell::RefCell::new(make_tray(tray_tx)));
         {
             let tray = tray.clone();
+            let dict = dictation.clone();
+            let ctrl = controller.clone();
+            let shell = shell.clone();
+            cx.subscribe(&dictation, move |_, ev: &dictation::DictationEvent, cx| {
+                let block = dict.read(cx).keyboard_guard.current().cloned();
+                tray.borrow_mut().set_shortcut_block(block.as_ref());
+                // Refresh even when Dictation settings is behind another app.
+                if matches!(ev, dictation::DictationEvent::Changed) {
+                    cx.refresh_windows();
+                }
+                let (ctrl, shell) = (ctrl.clone(), shell.clone());
+                match ev {
+                    dictation::DictationEvent::ShortcutBlocked(block) => {
+                        let block = block.clone();
+                        cx.defer(move |cx| popup::show(popup::PopupKind::ShortcutBlocked(block), ctrl, shell.as_ref(), cx));
+                    }
+                    dictation::DictationEvent::Changed if block.is_none() => cx.defer(popup::close_shortcut_warning),
+                    _ => {}
+                }
+            }).detach();
+        }
+        {
+            let tray = tray.clone();
             let pill_shell = shell.clone();
             let last = std::cell::RefCell::new(None);
             let last_update = std::cell::RefCell::new(None::<String>);
@@ -257,6 +280,14 @@ fn main() {
                                 if let Some(url) = ctrl.read(cx).update_download.clone() {
                                     cx.open_url(&url);
                                 }
+                            }
+                            TrayCommand::ShowShortcutBlocker => {
+                                if let Some(owner) = dictation_entity().and_then(|d| d.read(cx).keyboard_guard.current().and_then(|b| b.owner.clone())) {
+                                    stenly_platform::show_shortcut_blocker(&owner);
+                                }
+                            }
+                            TrayCommand::OpenDictationSettings => {
+                                main_window::open(ctrl.clone(), Some(main_window::Page::Dictation), cx);
                             }
                             TrayCommand::OpenDictations => {
                                 main_window::open(ctrl.clone(), Some(main_window::Page::History), cx);

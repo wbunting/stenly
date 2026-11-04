@@ -15,6 +15,7 @@ use stenly_core::scheduler::Prompt;
 
 pub enum PopupKind {
     Start(Prompt),
+    ShortcutBlocked(stenly_core::keyboard_guard::ShortcutBlock),
     Stop(String),
     /// A finished note is ready. This is deliberately a non-activating nudge:
     /// sharing or opening requires a user click.
@@ -48,6 +49,9 @@ pub fn show(kind: PopupKind, controller: Entity<Controller>, shell: &dyn Desktop
     // time-sensitive Record prompt, nor stack under a backlog's later nudges.
     let existing: Vec<_> = cx.windows().into_iter().filter_map(|w| w.downcast::<Popup>()).collect();
     let has_start = existing.iter().any(|h| h.read(cx).is_ok_and(|p| matches!(p.kind, PopupKind::Start(_))));
+    if matches!(&kind, PopupKind::ShortcutBlocked(_)) && !existing.is_empty() {
+        return; // Keyboard diagnostics must never replace meeting prompts.
+    }
     if matches!(&kind, PopupKind::NoteReady { .. }) && has_start {
         return;
     }
@@ -78,7 +82,7 @@ pub fn show(kind: PopupKind, controller: Entity<Controller>, shell: &dyn Desktop
         }
         _ => (None, false),
     };
-    let height = if brief.is_some() { H_BRIEF } else if hint { H_HINT } else { H };
+    let height = if matches!(&kind, PopupKind::ShortcutBlocked(_)) { 164. } else if brief.is_some() { H_BRIEF } else if hint { H_HINT } else { H };
     let opts = WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds { origin, size: size(px(W), px(height)) })),
         titlebar: None,
@@ -105,6 +109,7 @@ pub fn show(kind: PopupKind, controller: Entity<Controller>, shell: &dyn Desktop
             let secs = match &kind {
                 PopupKind::Start(_) => START_PROMPT_SECS,
                 PopupKind::Stop(_) => 90,
+                PopupKind::ShortcutBlocked(_) => 12,
                 PopupKind::NoteReady { .. } => NOTE_READY_SECS,
             };
             let auto_stop = matches!(kind, PopupKind::Stop(_));
@@ -124,6 +129,23 @@ pub fn show(kind: PopupKind, controller: Entity<Controller>, shell: &dyn Desktop
     });
     if let Err(e) = res {
         tracing::error!(error = %e, "failed to open popup");
+    }
+}
+
+/// Release the diagnostic nudge as soon as protection ends, not other prompts.
+pub fn close_shortcut_warning(cx: &mut App) {
+    let popups: Vec<_> = cx
+        .windows()
+        .into_iter()
+        .filter_map(|w| w.downcast::<Popup>())
+        .collect();
+    for handle in popups {
+        if handle
+            .read(cx)
+            .is_ok_and(|p| matches!(p.kind, PopupKind::ShortcutBlocked(_)))
+        {
+            let _ = handle.update(cx, |_, window, _| window.remove_window());
+        }
     }
 }
 
@@ -183,6 +205,40 @@ fn join_button(prompt: &Prompt, mode: stenly_core::meet_app::MeetLinks) -> Optio
 impl Render for Popup {
     fn render(&mut self, _window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let (heading, sub, actions): (String, String, Vec<gpui::AnyElement>) = match &self.kind {
+            PopupKind::ShortcutBlocked(block) => {
+                let ctrl = self.controller.clone();
+                let owner = block.owner.clone();
+                let mut actions = vec![
+                    button("shortcut-dismiss", "Dismiss", false)
+                        .on_click(|_, window, _| window.remove_window())
+                        .into_any_element(),
+                ];
+                if let Some(owner) = owner {
+                    actions.push(
+                        button("shortcut-show-app", "Show blocking app", true)
+                            .on_click(move |_, window, _| {
+                                stenly_platform::show_shortcut_blocker(&owner);
+                                window.remove_window();
+                            })
+                            .into_any_element(),
+                    );
+                } else {
+                    actions.push(
+                        button("shortcut-settings", "Dictation settings", true)
+                            .on_click(move |_, window, cx| {
+                                crate::main_window::open(
+                                    ctrl.clone(),
+                                    Some(crate::main_window::Page::Dictation),
+                                    cx,
+                                );
+                                window.remove_window();
+                            })
+                            .into_any_element(),
+                    );
+                }
+                let source = block.owner.as_ref().map(|o| o.name.as_str()).unwrap_or("Another app");
+                ("Dictation shortcut blocked".into(), format!("{source} has Secure Keyboard Entry on. Leave the password field or dismiss its prompt. Your shortcut recovers automatically."), actions)
+            }
             PopupKind::Start(p) => {
                 let (heading, sub) = match p {
                     Prompt::Upcoming(e) => {
@@ -390,7 +446,7 @@ impl Render for Popup {
                                     .flex()
                                     .items_baseline()
                                     .gap(px(8.))
-                                    .child(div().min_w_0().text_size(px(theme::BODY)).line_height(px(16.)).text_color(theme::muted()).line_clamp(2).child(sub))
+                                    .child(div().min_w_0().text_size(px(theme::BODY)).line_height(px(16.)).text_color(theme::muted()).line_clamp(if matches!(&self.kind, PopupKind::ShortcutBlocked(_)) { 4 } else { 2 }).child(sub))
                                     .children(view_brief),
                             ),
                     ),

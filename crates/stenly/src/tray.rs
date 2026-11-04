@@ -26,6 +26,10 @@ mod real {
         menu: Menu,
         update: MenuItem,
         update_shown: bool,
+        shortcut_status: MenuItem,
+        show_blocker: MenuItem,
+        title: Option<String>,
+        blocked: bool,
     }
 
     /// Draw the icon at runtime (no assets): a ring when idle, a filled red dot when recording.
@@ -58,6 +62,8 @@ mod real {
             let status = MenuItem::new("Stenly", false, None);
             let toggle = MenuItem::new("Start recording", true, None);
             let dictate = MenuItem::new("Start dictation", true, None);
+            let shortcut_status = MenuItem::new("Dictation shortcut settings…", true, None);
+            let show_blocker = MenuItem::new("Show blocking app", false, None);
             let history = MenuItem::new("Dictations…", true, None);
             let open = MenuItem::new("Open Stenly…", true, None);
             let notes = MenuItem::new("Open notes folder", true, None);
@@ -69,6 +75,8 @@ mod real {
             menu.append(&PredefinedMenuItem::separator())?;
             menu.append(&toggle)?;
             menu.append(&dictate)?;
+            menu.append(&shortcut_status)?;
+            menu.append(&show_blocker)?;
             menu.append(&PredefinedMenuItem::separator())?;
             menu.append(&history)?;
             menu.append(&open)?;
@@ -77,6 +85,7 @@ mod real {
             menu.append(&quit)?;
 
             let ids = (toggle.id().clone(), open.id().clone(), notes.id().clone(), quit.id().clone(), dictate.id().clone(), history.id().clone(), status.id().clone(), update.id().clone());
+            let shortcut_ids = (shortcut_status.id().clone(), show_blocker.id().clone());
             let toggle_state = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             let ts = toggle_state.clone();
             MenuEvent::set_event_handler(Some(move |e: MenuEvent| {
@@ -90,6 +99,10 @@ mod real {
                     TrayCommand::Quit
                 } else if e.id == ids.4 {
                     TrayCommand::ToggleDictation
+                } else if e.id == shortcut_ids.0 {
+                    TrayCommand::OpenDictationSettings
+                } else if e.id == shortcut_ids.1 {
+                    TrayCommand::ShowShortcutBlocker
                 } else if e.id == ids.5 {
                     TrayCommand::OpenDictations
                 } else if e.id == ids.6 {
@@ -113,7 +126,7 @@ mod real {
                 .with_tooltip("Stenly")
                 .with_menu(Box::new(menu.clone()))
                 .build()?;
-            Ok(Self { icon, status, toggle, recording: false, menu, update, update_shown: false })
+            Ok(Self { icon, status, toggle, recording: false, menu, update, update_shown: false, shortcut_status, show_blocker, title: None, blocked: false })
         }
     }
 
@@ -121,10 +134,35 @@ mod real {
 
     impl Tray for TrayIconTray {
         fn set_title(&mut self, title: Option<&str>) {
+            self.title = title.map(str::to_owned);
+            let label = if self.blocked {
+                Some(" Dictation shortcut blocked".to_string())
+            } else {
+                title.map(|t| format!(" {t}"))
+            };
             #[cfg(target_os = "macos")]
-            self.icon.set_title(title.map(|t| format!(" {t}")));
-            #[cfg(not(target_os = "macos"))]
-            let _ = self.icon.set_tooltip(Some(title.unwrap_or("Stenly")));
+            self.icon.set_title(label);
+            let _ = self.icon.set_tooltip(Some(if self.blocked {
+                "Stenly — dictation shortcut blocked"
+            } else {
+                title.unwrap_or("Stenly")
+            }));
+        }
+
+        fn set_shortcut_block(
+            &mut self,
+            block: Option<&stenly_core::keyboard_guard::ShortcutBlock>,
+        ) {
+            self.blocked = block.is_some();
+            self.shortcut_status.set_text(
+                block
+                    .map(|b| b.title())
+                    .unwrap_or_else(|| "Dictation shortcut settings…".into()),
+            );
+            self.show_blocker
+                .set_enabled(block.is_some_and(|b| b.owner.is_some()));
+            let title = self.title.clone();
+            self.set_title(title.as_deref());
         }
 
         fn set_update(&mut self, version: Option<&str>) {
