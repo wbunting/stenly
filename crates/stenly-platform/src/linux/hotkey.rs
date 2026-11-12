@@ -141,6 +141,22 @@ fn keyboards() -> Vec<std::path::PathBuf> {
     out
 }
 
+/// Whether shortcuts can work: some keyboard under /dev/input opens for reading.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum KeyboardAccess {
+    Readable,
+    Denied,
+    NoKeyboard,
+}
+
+pub(crate) fn keyboard_access() -> KeyboardAccess {
+    let kbds = keyboards();
+    if kbds.is_empty() {
+        return KeyboardAccess::NoKeyboard;
+    }
+    if kbds.iter().any(|p| std::fs::File::open(p).is_ok()) { KeyboardAccess::Readable } else { KeyboardAccess::Denied }
+}
+
 /// /sys/class/input/eventN/device/capabilities/key has bits for KEY_A etc.
 fn is_keyboard(dev: &std::path::Path) -> bool {
     let Some(n) = dev.file_name().map(|n| n.to_string_lossy().to_string()) else { return false };

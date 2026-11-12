@@ -1253,7 +1253,7 @@ impl Controller {
                     };
                     let r = match action {
                         LicenseAction::Activate(key) => m.activate(&*p, &key, now).map(|_| "Licence activated. Thank you!".to_string()),
-                        LicenseAction::Deactivate => m.deactivate(&*p, now).map(|_| "Licence removed from this Mac. You can activate it on another Mac.".to_string()),
+                        LicenseAction::Deactivate => m.deactivate(&*p, now).map(|_| stenly_core::util::os_copy("Licence removed from this Mac. You can activate it on another Mac.").into_owned()),
                         LicenseAction::Check => match m.refresh(&*p, now, false) {
                             Refresh::Revoked => Ok("Your licence is no longer valid.".to_string()),
                             _ => Ok(String::new()),

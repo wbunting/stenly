@@ -8,6 +8,7 @@
 mod hotkey;
 mod inject;
 mod mic_activity;
+mod setup;
 
 use crate::Platform;
 use anyhow::{Context, Result};
@@ -15,7 +16,7 @@ use cpal::traits::{DeviceTrait, HostTrait};
 use crossbeam_channel::Sender;
 use std::sync::Arc;
 use stenly_core::audio::AudioChunk;
-use stenly_core::platform::{AudioBackend, CaptureStream, DesktopShell};
+use stenly_core::platform::{AudioBackend, CaptureStream, DesktopShell, SetupCheck};
 
 struct LinuxAudio;
 
@@ -91,7 +92,11 @@ impl AudioBackend for LinuxAudio {
 
 /// Generic shell: no Dock to hide from, no portable screencast exclusion.
 struct LinuxShell;
-impl DesktopShell for LinuxShell {}
+impl DesktopShell for LinuxShell {
+    fn setup_checks(&self) -> Vec<SetupCheck> {
+        setup::checks()
+    }
+}
 
 pub fn platform() -> Platform {
     Platform {

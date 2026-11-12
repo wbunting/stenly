@@ -157,7 +157,7 @@ impl MainWindow {
         } else if cfg.llm.uses_api() {
             format!("{} (API)", cfg.llm.api.model)
         } else {
-            format!("{} on this Mac", cfg.llm.model)
+            ui::os_fmt(format!("{} on this Mac", cfg.llm.model))
         };
 
         // Replacements: "heard as → write as" chips + an add row.
@@ -254,7 +254,7 @@ impl MainWindow {
                     Some(
                         match d.stream {
                             StreamMode::Pause => "Text is ready about a second after you stop, however long you talk",
-                            StreamMode::Overlap => "Re-reads a few seconds around each cut; slower to finish on a busy Mac",
+                            StreamMode::Overlap => if cfg!(target_os = "macos") { "Re-reads a few seconds around each cut; slower to finish on a busy Mac" } else { "Re-reads a few seconds around each cut; slower to finish on a busy computer" },
                             StreamMode::Off => "Transcribes after you stop; long dictations take longer",
                         }
                         .into(),
@@ -301,7 +301,7 @@ impl MainWindow {
                 ui::row(
                     None,
                     "Keep dictations",
-                    Some("Text and audio, on this Mac only".into()),
+                    Some(ui::os("Text and audio, on this Mac only")),
                     ui::popup("hist-limit", &[(0usize, "Don't keep"), (50, "Last 50"), (200, "Last 200"), (1000, "Last 1,000")], cur, move |v, cx| ctrl.update(cx, |c, cx| c.set("dictation.history_limit", v as i64, cx))),
                 )
                 .into_any_element()

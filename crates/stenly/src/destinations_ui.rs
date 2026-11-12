@@ -202,14 +202,14 @@ impl DestUi {
         let signing_saved = !is_new && stenly_core::secrets::destination_secret(&dest::secret_account(&cfg.id, "signing")).is_some();
         let secret_ph = match (cfg.kind, secret_saved) {
             (_, true) if from_env.is_some() => format!("From ${} · type to use another", from_env.unwrap_or_default()),
-            (_, true) => "Saved in Keychain · type to replace".to_string(),
+            (_, true) => ui::os("Saved in Keychain · type to replace").to_string(),
             (Kind::Notion, false) => "ntn_…".to_string(),
             (Kind::Slack, false) => "https://hooks.slack.com/services/…".to_string(),
             (Kind::Share, false) => "Optional".to_string(),
             (_, false) => "https://…".to_string(),
         };
         self.secret = cx.new(|cx| TextInput::new(cx, secret_ph).masked());
-        self.signing = cx.new(|cx| TextInput::new(cx, if signing_saved { "Saved in Keychain · type to replace" } else { "Optional" }).masked());
+        self.signing = cx.new(|cx| TextInput::new(cx, ui::os(if signing_saved { "Saved in Keychain · type to replace" } else { "Optional" })).masked());
         self.name.update(cx, |t, cx| t.set_text(cfg.name.clone(), cx));
         self.database.update(cx, |t, cx| t.set_text(if cfg.kind == Kind::Share { cfg.share.server_url.clone() } else { cfg.notion.database_id.clone() }, cx));
         self.titles.update(cx, |t, cx| t.set_text(cfg.auto.title_contains.join(", "), cx));
@@ -444,7 +444,7 @@ fn send_menu(cfg: &stenly_core::Config, meta: &SessionMeta) -> (Vec<MenuEntry>, 
     let now = Local::now();
     let mut entries: Vec<MenuEntry> = Vec::new();
     let mut ids: Vec<Option<String>> = Vec::new();
-    for (header, loc) in [("On this Mac", Locality::Local), ("Other services", Locality::Cloud)] {
+    for (header, loc) in [(if cfg!(target_os = "macos") { "On this Mac" } else { "On this computer" }, Locality::Local), ("Other services", Locality::Cloud)] {
         let group: Vec<&Box<dyn Destination>> = all.iter().filter(|d| d.locality() == loc).collect();
         if group.is_empty() {
             continue;
@@ -802,7 +802,7 @@ impl DestUi {
         div()
             .flex()
             .flex_col()
-            .child(ui::caption("On This Mac"))
+            .child(ui::caption(ui::os("On This Mac")))
             .child(ui::card(local))
             .child(ui::caption("Other Services"))
             .child(if cloud.is_empty() {
@@ -825,7 +825,7 @@ impl DestUi {
             .gap(px(4.))
             .child(privacy_label(kind.locality(), match kind {
                 Kind::Folder => dest::privacy_caption(Locality::Local, ""),
-                k => format!("{} · your notes and attendee names leave this Mac", dest::privacy_caption(Locality::Cloud, k.service())),
+                k => ui::os_fmt(format!("{} · your notes and attendee names leave this Mac", dest::privacy_caption(Locality::Cloud, k.service()))),
             }));
 
         let mut general = vec![field_row("Name", ui::text_field(self.name.clone()))];
@@ -869,21 +869,21 @@ impl DestUi {
                 let days = d.share.expiry_days;
                 let me2 = me.clone();
                 general.push(ui::row(None, "Expires", Some("The server may enforce a shorter maximum".into()), ui::popup("dest-share-expiry", &[(7u32, "7 days"), (30, "30 days"), (90, "90 days"), (365, "1 year")], [7,30,90,365].into_iter().min_by_key(|v| (*v as i64 - days as i64).abs()).unwrap_or(90), move |v, cx| me2.update(cx, |s, cx| s.edit(cx, |c| c.share.expiry_days = v)))) .into_any_element());
-                general.push(help("Your note is encrypted on this Mac. The key stays in your Keychain and is only added after # in the link you copy."));
+                general.push(help(ui::os("Your note is encrypted on this Mac. The key stays in your Keychain and is only added after # in the link you copy.")));
             }
             Kind::Slack | Kind::Webhook => {
                 general.push(field_row(kind.secret_label(), ui::text_field(self.secret.clone())));
                 if kind == Kind::Webhook {
                     general.push(field_row("Signing secret", ui::text_field(self.signing.clone())));
                     general.push(ui::row(None, "Include transcript", Some("Adds every line of the transcript to the JSON".into()), toggle("dest-wt", d.webhook.include_transcript, |c, v| c.webhook.include_transcript = v, &me)).into_any_element());
-                    general.push(help("Stenly POSTs JSON (type “stenly.meeting.v1”: title, times, attendees, summary, Markdown, transcript). With a signing secret, X-Stenly-Signature carries an HMAC-SHA256 of the body. The URL and secret are kept in your Keychain."));
+                    general.push(help(ui::os("Stenly POSTs JSON (type “stenly.meeting.v1”: title, times, attendees, summary, Markdown, transcript). With a signing secret, X-Stenly-Signature carries an HMAC-SHA256 of the body. The URL and secret are kept in your Keychain.")));
                 } else {
-                    general.push(help("In Slack: Apps → Incoming Webhooks → Add to a channel, then paste the URL. It's kept in your Keychain."));
+                    general.push(help(ui::os("In Slack: Apps → Incoming Webhooks → Add to a channel, then paste the URL. It's kept in your Keychain.")));
                 }
             }
             Kind::Notion => {
                 general.push(field_row("Integration token", ui::text_field(self.secret.clone())));
-                general.push(help("Create an internal integration at notion.so/my-integrations, copy its secret here, then share your meetings database (and any related database) with it: ••• → Connections. The token is kept in your Keychain."));
+                general.push(help(ui::os("Create an internal integration at notion.so/my-integrations, copy its secret here, then share your meetings database (and any related database) with it: ••• → Connections. The token is kept in your Keychain.")));
                 let me2 = me.clone();
                 general.push(field_row(
                     "Database",
@@ -1075,9 +1075,9 @@ impl DestUi {
             None => probe_line(
                 &e.test,
                 match (kind, e.secret_saved) {
-                    (Kind::Folder, _) => "",
-                    (_, true) => "Credentials saved in your Keychain.",
-                    _ => "Credentials are stored in your Keychain, never in the config file.",
+                    (Kind::Folder, _) => "".into(),
+                    (_, true) => ui::os("Credentials saved in your Keychain."),
+                    _ => ui::os("Credentials are stored in your Keychain, never in the config file."),
                 },
             ),
         };

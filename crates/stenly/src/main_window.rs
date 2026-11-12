@@ -271,7 +271,7 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
                     };
                     let api_endpoint = field(cx, "https://api.openai.com/v1", &api_cfg.endpoint);
                     let api_model = field(cx, "gpt-5-mini", &api_cfg.model);
-                    let api_key = cx.new(|cx| TextInput::new(cx, if has_key { "Saved in Keychain · type to replace" } else { "sk-…" }).masked());
+                    let api_key = cx.new(|cx| TextInput::new(cx, ui::os(if has_key { "Saved in Keychain · type to replace" } else { "sk-…" })).masked());
                     let cli_cfg = controller.read(cx).config.llm.cli.clone();
                     let cli_model = field(cx, "Default model", &cli_cfg.model);
                     let cli_path = field(cx, "Found automatically", &cli_cfg.path);
@@ -1208,9 +1208,9 @@ impl MainWindow {
         let voices = store.people().count();
         let anything = !store.is_empty();
         let desc: SharedString = if voices > 0 {
-            format!("From the meeting app's speaker highlight, the invite and the conversation. Remembers {voices} voice{} you've named (on this Mac).", if voices == 1 { "" } else { "s" }).into()
+            ui::os_fmt(format!("From the meeting app's speaker highlight, the invite and the conversation. Remembers {voices} voice{} you've named (on this Mac).", if voices == 1 { "" } else { "s" })).into()
         } else {
-            "From the meeting app's speaker highlight, the invite and the conversation. Voices you name are remembered on this Mac.".into()
+            ui::os("From the meeting app's speaker highlight, the invite and the conversation. Voices you name are remembered on this Mac.")
         };
         // also shown when only unconfirmed voices are kept (first calls named from the invite)
         let forget = anything.then(|| {
@@ -2230,8 +2230,8 @@ impl MainWindow {
             .flex_col()
             .child(ui::caption("Startup"))
             .child(ui::card(vec![
-                ui::row(Some(icons::MENUBAR), "Show next meeting in menu bar", Some("Your next meeting and time until it starts, next to the Stenly icon".into()), tog("menubar", "app.show_next_in_menubar", cfg.app.show_next_in_menubar)).into_any_element(),
-                ui::row(Some(icons::POWER), "Open at login", Some("Start quietly in the menu bar".into()), login).into_any_element(),
+                ui::row(Some(icons::MENUBAR), ui::os("Show next meeting in menu bar"), Some("Your next meeting and time until it starts, next to the Stenly icon".into()), tog("menubar", "app.show_next_in_menubar", cfg.app.show_next_in_menubar)).into_any_element(),
+                ui::row(Some(icons::POWER), "Open at login", Some(ui::os("Start quietly in the menu bar")), login).into_any_element(),
             ]))
             .child(ui::caption("Meetings"))
             .child(ui::card(vec![
@@ -2329,7 +2329,7 @@ impl MainWindow {
                     .into_any_element()
                 })
                 .collect();
-            div().child(ui::caption("Found on this Mac")).child(ui::card(rows)).into_any_element()
+            div().child(ui::caption(ui::os("Found on this Mac"))).child(ui::card(rows)).into_any_element()
         });
         let auto = {
             let ctrl = ctrl.clone();
@@ -2712,7 +2712,7 @@ impl MainWindow {
                 ui::button("speech-retry", "Retry", Btn::Primary).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.retry_download(&id, cx))).into_any_element(),
             ),
             Speech::Missing => (
-                "Recording and dictation need the speech model (about 650 MB, runs on this Mac).".into(),
+                ui::os("Recording and dictation need the speech model (about 650 MB, runs on this Mac)."),
                 ui::button("speech-download", "Download", Btn::Primary).on_click(move |_, _, cx| ctrl.update(cx, |c, cx| c.download_asr(id.clone(), cx))).into_any_element(),
             ),
         };
@@ -2902,7 +2902,7 @@ impl MainWindow {
         let source_row = {
             let ctrl = self.controller.clone();
             use stenly_core::cli_llm::Tool;
-            let mut opts: Vec<(u8, &'static str)> = vec![(0, "Ollama on this Mac"), (1, "An API (OpenAI-compatible)")];
+            let mut opts: Vec<(u8, &'static str)> = vec![(0, if cfg!(target_os = "macos") { "Ollama on this Mac" } else { "Ollama on this computer" }), (1, "An API (OpenAI-compatible)")];
             if cli_found.contains(&Tool::Codex) || source_now == 2 {
                 opts.push((2, "Codex (OpenAI)"));
             }
@@ -2911,10 +2911,10 @@ impl MainWindow {
             }
             opts.push((4, "ChatGPT (your plan)"));
             let desc: SharedString = match source_now {
-                4 => "Your ChatGPT plan. Your transcript is sent to OpenAI under your account; audio never leaves this Mac.".into(),
-                1 => "A hosted model. Your transcript is sent to it; audio never leaves this Mac.".into(),
+                4 => ui::os("Your ChatGPT plan. Your transcript is sent to OpenAI under your account; audio never leaves this Mac."),
+                1 => ui::os("A hosted model. Your transcript is sent to it; audio never leaves this Mac."),
                 2 | 3 => stenly_core::cli_llm::Tool::parse(&cfg.llm.cli.tool).unwrap_or(Tool::Codex).disclosure().into(),
-                _ => "A model running in Ollama on this Mac. Nothing leaves it.".into(),
+                _ => ui::os("A model running in Ollama on this Mac. Nothing leaves it."),
             };
             let status = self.controller.read(cx).summary_status();
             let desc: SharedString = match &status {
@@ -3118,7 +3118,7 @@ impl MainWindow {
             })
             .into_any_element();
         let status: AnyElement = match &test {
-            crate::controller::ApiTest::Idle => div().text_color(theme::muted()).child(if key_saved || !api.api_key.is_empty() || !api.api_key_env.is_empty() { "Key saved in your Keychain." } else { "Keys are stored in your macOS Keychain, not the config file." }).into_any_element(),
+            crate::controller::ApiTest::Idle => div().text_color(theme::muted()).child(ui::os(if key_saved || !api.api_key.is_empty() || !api.api_key_env.is_empty() { "Key saved in your Keychain." } else { "Keys are stored in your macOS Keychain, not the config file." })).into_any_element(),
             crate::controller::ApiTest::Running => ui::pending("api-testing", "Testing…").into_any_element(),
             crate::controller::ApiTest::Ok(m) => div().flex().items_center().gap(px(5.)).text_color(theme::muted()).child(icon(icons::CHECK, 11., theme::green())).child(m.clone()).into_any_element(),
             crate::controller::ApiTest::Failed(e) => div().flex().items_center().gap(px(5.)).text_color(theme::muted()).child(icon(icons::ALERT, 11., theme::amber())).child(div().flex_1().min_w_0().child(e.clone())).into_any_element(),
@@ -3218,7 +3218,7 @@ impl MainWindow {
             (_, ApiTest::Running) => ui::pending("chatgpt-testing", "Testing…").into_any_element(),
             (_, ApiTest::Ok(m)) => div().flex().items_center().gap(px(5.)).text_color(theme::muted()).child(icon(icons::CHECK, 11., theme::green())).child(m.clone()).into_any_element(),
             (_, ApiTest::Failed(e)) => div().flex().items_center().gap(px(5.)).text_color(theme::muted()).child(icon(icons::ALERT, 11., theme::amber())).child(div().flex_1().min_w_0().child(e.clone())).into_any_element(),
-            _ => div().text_color(theme::muted()).child("Your transcript is sent to OpenAI under your account. The sign-in is kept in your Keychain.").into_any_element(),
+            _ => div().text_color(theme::muted()).child(ui::os("Your transcript is sent to OpenAI under your account. The sign-in is kept in your Keychain.")).into_any_element(),
         };
         let test_row = div()
             .flex()

@@ -11,6 +11,8 @@ use gpui::{App, Hsla, Rgba, WindowAppearance, rgb, rgba};
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 pub const SANS: &str = ".SystemUIFont";
+/// Commands and code: Menlo on macOS, the fontconfig monospace elsewhere.
+pub const MONO: &str = if cfg!(target_os = "macos") { "Menlo" } else { "monospace" };
 
 static DARK: AtomicBool = AtomicBool::new(true);
 /// 0xRRGGBB of the user's accent, or u32::MAX for "multicolour" (use ours).

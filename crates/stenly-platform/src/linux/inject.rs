@@ -9,12 +9,38 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 use stenly_core::platform::TextInjector;
 
-fn wayland() -> bool {
+pub(crate) fn wayland() -> bool {
     std::env::var_os("WAYLAND_DISPLAY").is_some()
 }
 
-fn have(cmd: &str) -> bool {
-    Command::new("sh").args(["-c", &format!("command -v {cmd}")]).stdout(Stdio::null()).stderr(Stdio::null()).status().is_ok_and(|s| s.success())
+/// An executable named `cmd` is on PATH.
+pub(crate) fn have(cmd: &str) -> bool {
+    use std::os::unix::fs::PermissionsExt;
+    std::env::var_os("PATH").is_some_and(|path| {
+        std::env::split_paths(&path).any(|dir| std::fs::metadata(dir.join(cmd)).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0))
+    })
+}
+
+/// Packages to install so [`LinuxInjector`] can paste: a clipboard tool and
+/// a key sender for this session type. Empty when everything is there.
+pub(crate) fn missing_tools() -> Vec<&'static str> {
+    let mut out = vec![];
+    if wayland() {
+        if !have("wl-copy") {
+            out.push("wl-clipboard");
+        }
+        if !have("wtype") && !have("ydotool") {
+            out.push("wtype");
+        }
+    } else {
+        if !have("xclip") && !have("xsel") {
+            out.push("xclip");
+        }
+        if !have("xdotool") && !have("ydotool") {
+            out.push("xdotool");
+        }
+    }
+    out
 }
 
 fn pipe_into(cmd: &str, args: &[&str], input: &str) -> Result<()> {
