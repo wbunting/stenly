@@ -36,10 +36,10 @@ impl MainWindow {
             State::Open => "This build of Stenly is free to use and doesn't need a licence. Thanks for building it yourself.".into(),
             State::Licensed => {
                 let l = snap.license.as_ref().expect("licensed has a licence");
-                format!("Key {} · one Mac · updates included. Checked {}.", l.masked_key, l.last_validated.with_timezone(&chrono::Local).format("%b %-d")).into()
+                crate::ui::os_fmt(format!("Key {} · one Mac · updates included. Checked {}.", l.masked_key, l.last_validated.with_timezone(&chrono::Local).format("%b %-d"))).into()
             }
             State::Trial if !can_buy => "Transcription isn't set up yet, so Stenly can't record. Set that up first; a one-time $10 licence comes after the free meetings.".into(),
-            State::Trial => "After that, a one-time $10 licence keeps recording on this Mac. Updates are included.".into(),
+            State::Trial => crate::ui::os("After that, a one-time $10 licence keeps recording on this Mac. Updates are included."),
             State::Expired if !can_buy => "New meetings can't be recorded until transcription is set up and you add a licence. Your notes, search, sharing and dictation keep working.".into(),
             State::Expired => "New meetings can't be recorded until you add a licence. Your notes, search, sharing and dictation keep working.".into(),
         };
@@ -141,8 +141,8 @@ impl MainWindow {
             let ctrl = ctrl.clone();
             ui::row(
                 None,
-                "This Mac",
-                Some("Deactivate to move the licence to another Mac.".into()),
+                crate::ui::os("This Mac"),
+                Some(crate::ui::os("Deactivate to move the licence to another Mac.")),
                 if busy {
                     ui::pending("license-deactivating", "Working…").into_any_element()
                 } else {

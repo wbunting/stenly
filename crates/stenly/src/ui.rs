@@ -12,6 +12,19 @@ use gpui::{
     Window, div, prelude::*, px,
 };
 
+/// macOS-worded copy, reworded on other desktops (see [`stenly_core::util::os_copy`]).
+pub fn os(s: &'static str) -> SharedString {
+    match stenly_core::util::os_copy(s) {
+        std::borrow::Cow::Borrowed(b) => SharedString::new_static(b),
+        std::borrow::Cow::Owned(o) => o.into(),
+    }
+}
+
+/// [`os`] for copy that has been formatted at runtime.
+pub fn os_fmt(s: String) -> String {
+    if cfg!(target_os = "macos") { s } else { stenly_core::util::desktop_copy(&s) }
+}
+
 /// Window / page title (Large Title, bold).
 pub fn page_title(text: impl Into<SharedString>) -> Div {
     div().text_size(px(theme::LARGE_TITLE)).line_height(px(32.)).font_weight(FontWeight::BOLD).text_color(theme::text()).child(text.into())

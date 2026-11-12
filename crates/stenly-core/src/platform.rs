@@ -258,6 +258,18 @@ pub enum PermissionState {
     NotApplicable,
 }
 
+/// Something the user sets up outside the app, where the OS has no permission
+/// prompt for it (Linux: keyboard access for shortcuts, helper tools to paste).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SetupCheck {
+    pub title: &'static str,
+    /// What it is for when `ok`, otherwise what is missing.
+    pub detail: String,
+    pub ok: bool,
+    /// A shell command that fixes it, shown with a Copy button.
+    pub fix: Option<String>,
+}
+
 /// Desktop integration that cannot be expressed through gpui itself.
 /// Every method has a no-op default so a minimal Linux build works anywhere.
 pub trait DesktopShell {
@@ -292,6 +304,11 @@ pub trait DesktopShell {
     fn request_permission(&self, _p: Permission) {}
     /// Open the relevant OS settings page.
     fn open_permission_settings(&self, _p: Permission) {}
+    /// Dictation prerequisites with no OS prompt (checked, never changed).
+    /// Empty where [`DesktopShell::permission`] covers everything.
+    fn setup_checks(&self) -> Vec<SetupCheck> {
+        vec![]
+    }
     /// Register / unregister to start at login.
     fn set_launch_at_login(&self, _enabled: bool) -> anyhow::Result<()> {
         anyhow::bail!("launch at login isn't supported on this platform yet")

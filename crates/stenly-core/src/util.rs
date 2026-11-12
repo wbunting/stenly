@@ -71,8 +71,53 @@ pub fn render_template(tpl: &str, at: chrono::DateTime<chrono::Local>, title: &s
         .replace("{slug}", &slug(title))
 }
 
+/// UI copy is written for macOS ("this Mac", "Keychain", "menu bar"). Returns
+/// it unchanged there and reworded for other desktops.
+pub fn os_copy(s: &'static str) -> std::borrow::Cow<'static, str> {
+    if cfg!(target_os = "macos") { s.into() } else { desktop_copy(s).into() }
+}
+
+/// [`os_copy`]'s rewording for non-macOS desktops, where secrets live in a
+/// 0600 file next to the config and the app sits in the system tray.
+pub fn desktop_copy(s: &str) -> String {
+    const PRIVATE: &str = "in a private file only you can read";
+    let rules: [(&str, &str); 15] = [
+        ("in your macOS Keychain", PRIVATE),
+        ("in your Keychain", PRIVATE),
+        ("in the Keychain", PRIVATE),
+        ("Saved in Keychain", "Saved privately"),
+        ("stored in Keychain", "stored privately"),
+        ("On This Mac", "On This Computer"),
+        ("This Mac", "This computer"),
+        ("this Mac", "this computer"),
+        ("your Mac", "your computer"),
+        ("busy Mac", "busy computer"),
+        ("another Mac", "another computer"),
+        ("one Mac", "one computer"),
+        ("your menu bar", "your system tray"),
+        ("the menu bar", "the system tray"),
+        ("in menu bar", "in the system tray"),
+    ];
+    rules.iter().fold(s.to_string(), |acc, (from, to)| acc.replace(from, to))
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn desktop_copy_rewords_mac_terms() {
+        assert_eq!(desktop_copy("Meeting notes that write themselves, on your Mac."), "Meeting notes that write themselves, on your computer.");
+        assert_eq!(desktop_copy("Summaries stay on this Mac."), "Summaries stay on this computer.");
+        assert_eq!(desktop_copy("On This Mac"), "On This Computer");
+        assert_eq!(desktop_copy("Keys are stored in your macOS Keychain, not the config file."), "Keys are stored in a private file only you can read, not the config file.");
+        assert_eq!(desktop_copy("Saved in Keychain · type to replace"), "Saved privately · type to replace");
+        assert_eq!(desktop_copy("API key (stored in Keychain)"), "API key (stored privately)");
+        assert_eq!(desktop_copy("Start quietly in the menu bar"), "Start quietly in the system tray");
+        assert_eq!(desktop_copy("Show next meeting in menu bar"), "Show next meeting in the system tray");
+        assert_eq!(desktop_copy("Deactivate to move the licence to another Mac."), "Deactivate to move the licence to another computer.");
+        assert_eq!(desktop_copy("Key ab12 · one Mac · updates included."), "Key ab12 · one computer · updates included.");
+        assert_eq!(desktop_copy("No Mac words here"), "No Mac words here");
+    }
+
     use super::*;
 
     #[test]

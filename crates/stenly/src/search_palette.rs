@@ -318,7 +318,7 @@ impl Render for SearchPalette {
         }
         let status = if self.hits.is_empty() {
             Some(if self.loading {
-                "Searching this Mac…"
+                if cfg!(target_os = "macos") { "Searching this Mac…" } else { "Searching this computer…" }
             } else if searching {
                 "No matching meetings."
             } else {

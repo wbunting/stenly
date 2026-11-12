@@ -11,7 +11,7 @@ use gpui::{
     AnyElement, App, Bounds, Context, Entity, FontWeight, IntoElement, ParentElement, PathPromptOptions, Render, Styled,
     Subscription, TitlebarOptions, Window, WindowBounds, WindowHandle, WindowOptions, div, prelude::*, px, size,
 };
-use stenly_core::platform::{Permission, PermissionState};
+use stenly_core::platform::{Permission, PermissionState, SetupCheck};
 use stenly_core::util::collapse_tilde;
 
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -33,7 +33,16 @@ pub struct Onboarding {
     api_endpoint: Entity<TextInput>,
     api_model: Entity<TextInput>,
     api_key: Entity<TextInput>,
+    /// Desktop prerequisites with no OS prompt (Linux), refreshed while shown.
+    setup: Vec<SetupCheck>,
+    /// Decided once at open so the step list doesn't change under the user.
+    show_permissions: bool,
     _subs: Vec<Subscription>,
+}
+
+/// No OS permission applies here (Linux): nothing for the user to allow.
+fn no_permissions(c: &Controller) -> bool {
+    [Permission::Microphone, Permission::SystemAudio, Permission::Accessibility].into_iter().all(|p| c.permission(p) == PermissionState::NotApplicable)
 }
 
 pub fn open(controller: Entity<Controller>, cx: &mut App) -> Option<WindowHandle<Onboarding>> {
@@ -83,7 +92,7 @@ pub fn open(controller: Entity<Controller>, cx: &mut App) -> Option<WindowHandle
                         t.set_text(api_cfg.model, cx);
                         t
                     });
-                    let api_key = cx.new(|cx| TextInput::new(cx, "API key (stored in Keychain)").masked());
+                    let api_key = cx.new(|cx| TextInput::new(cx, ui::os("API key (stored in Keychain)")).masked());
                     let mut subs = vec![sub, act, appearance];
                     for (input, key) in [(api_endpoint.clone(), "llm.api.endpoint"), (api_model.clone(), "llm.api.model")] {
                         let ctrl = controller.clone();
@@ -136,6 +145,9 @@ pub fn open(controller: Entity<Controller>, cx: &mut App) -> Option<WindowHandle
                         let alive = this.update(cx, |this, cx| {
                             if matches!(this.step, Step::Permissions | Step::Models) {
                                 ctrl.update(cx, |c, _| c.refresh_permissions());
+                                if this.step == Step::Permissions {
+                                    this.setup = ctrl.read(cx).shell.setup_checks();
+                                }
                                 cx.notify();
                             }
                         });
@@ -152,7 +164,14 @@ pub fn open(controller: Entity<Controller>, cx: &mut App) -> Option<WindowHandle
                             c.watch_summaries(cx);
                         });
                     }
-                    Onboarding { controller, step, kody_url, api_endpoint, api_model, api_key, _subs: subs }
+                    let (setup, show_permissions) = {
+                        let c = controller.read(cx);
+                        let setup = c.shell.setup_checks();
+                        let show = !no_permissions(c) || setup.iter().any(|s| !s.ok);
+                        (setup, show)
+                    };
+                    let step = if step == Step::Permissions && !show_permissions { Step::Calendar } else { step };
+                    Onboarding { controller, step, kody_url, api_endpoint, api_model, api_key, setup, show_permissions, _subs: subs }
                 })
             },
         )
@@ -162,9 +181,16 @@ pub fn open(controller: Entity<Controller>, cx: &mut App) -> Option<WindowHandle
 }
 
 impl Onboarding {
+    /// Steps shown on this platform. Permissions is dropped when there is
+    /// nothing to allow or set up (Linux with dictation already working).
+    fn steps(&self) -> Vec<Step> {
+        STEPS.iter().copied().filter(|s| self.show_permissions || *s != Step::Permissions).collect()
+    }
+
     fn next(&mut self, cx: &mut Context<Self>) {
-        let i = STEPS.iter().position(|s| *s == self.step).unwrap_or(0);
-        self.step = STEPS[(i + 1).min(STEPS.len() - 1)];
+        let steps = self.steps();
+        let i = steps.iter().position(|s| *s == self.step).unwrap_or(0);
+        self.step = steps[(i + 1).min(steps.len() - 1)];
         if self.step == Step::Models {
             self.controller.update(cx, |c, cx| {
                 c.refresh_ollama(cx);
@@ -175,8 +201,9 @@ impl Onboarding {
         cx.notify();
     }
     fn back(&mut self, cx: &mut Context<Self>) {
-        let i = STEPS.iter().position(|s| *s == self.step).unwrap_or(0);
-        self.step = STEPS[i.saturating_sub(1)];
+        let steps = self.steps();
+        let i = steps.iter().position(|s| *s == self.step).unwrap_or(0);
+        self.step = steps[i.saturating_sub(1)];
         cx.notify();
     }
 
@@ -188,11 +215,12 @@ impl Onboarding {
     }
 
     fn progress(&self) -> AnyElement {
-        let i = STEPS.iter().position(|s| *s == self.step).unwrap_or(0);
+        let steps = self.steps();
+        let i = steps.iter().position(|s| *s == self.step).unwrap_or(0);
         div()
             .flex()
             .gap(px(6.))
-            .children((1..STEPS.len() - 1).map(|k| {
+            .children((1..steps.len() - 1).map(|k| {
                 div().size(px(6.)).rounded_full().bg(if k == i { theme::text() } else { theme::toggle_off() })
             }))
             .into_any_element()
@@ -218,14 +246,14 @@ impl Onboarding {
             .into_any_element()
     }
 
-    fn header(title: &'static str, sub: &'static str) -> AnyElement {
+    fn header(title: &'static str, sub: impl Into<gpui::SharedString>) -> AnyElement {
         div()
             .flex()
             .flex_col()
             .gap(px(6.))
             .pb(px(16.))
             .child(ui::page_title(title))
-            .child(div().text_size(px(theme::BODY)).line_height(px(18.)).text_color(theme::muted()).child(sub))
+            .child(div().text_size(px(theme::BODY)).line_height(px(18.)).text_color(theme::muted()).child(sub.into()))
             .into_any_element()
     }
 
@@ -245,7 +273,7 @@ impl Onboarding {
                         .flex_col()
                         .gap(px(1.))
                         .child(div().text_size(px(theme::BODY)).font_weight(FontWeight::SEMIBOLD).child(title))
-                        .child(div().text_size(px(theme::BODY)).line_height(px(17.)).text_color(theme::muted()).child(body)),
+                        .child(div().text_size(px(theme::BODY)).line_height(px(17.)).text_color(theme::muted()).child(ui::os(body))),
                 )
         };
         div()
@@ -258,7 +286,7 @@ impl Onboarding {
             .pb(px(24.))
             .child(icons::logo(80.))
             .child(div().pt(px(14.)).child(ui::page_title("Welcome to Stenly")))
-            .child(div().pt(px(6.)).text_size(px(theme::BODY)).text_color(theme::muted()).child("Meeting notes that write themselves, on your Mac."))
+            .child(div().pt(px(6.)).text_size(px(theme::BODY)).text_color(theme::muted()).child(ui::os("Meeting notes that write themselves, on your Mac.")))
             .child(
                 div()
                     .pt(px(30.))
@@ -275,18 +303,56 @@ impl Onboarding {
     }
 
     fn permissions(&self, cx: &mut Context<Self>) -> AnyElement {
+        if no_permissions(self.controller.read(cx)) {
+            return self.desktop_setup(cx);
+        }
         let (req, opt) = main_window::permission_rows(&self.controller, cx);
         let c = self.controller.read(cx);
-        let mic_ok = c.permission(Permission::Microphone) == PermissionState::Granted;
+        let mic_ok = matches!(c.permission(Permission::Microphone), PermissionState::Granted | PermissionState::NotApplicable);
         div()
             .flex_1()
             .flex()
             .flex_col()
-            .child(Self::header("Let Stenly Listen", "Your mic for your side of the call, system audio for everyone else. No screen recording, and nothing leaves this Mac."))
+            .child(Self::header("Let Stenly Listen", ui::os("Your mic for your side of the call, system audio for everyone else. No screen recording, and nothing leaves this Mac.")))
             .child(ui::card(req))
             .when(!opt.is_empty(), |d| d.child(ui::caption("Optional")).child(ui::card(opt)))
             .child(div().flex_1())
             .child(self.footer("Continue", mic_ok, Some("Later"), cx))
+            .into_any_element()
+    }
+
+    /// Linux stand-in for the permissions step: what dictation needs from the
+    /// desktop, each with the command that fixes it.
+    fn desktop_setup(&self, cx: &mut Context<Self>) -> AnyElement {
+        let rows: Vec<AnyElement> = self
+            .setup
+            .iter()
+            .enumerate()
+            .map(|(i, check)| {
+                let trailing: AnyElement = if check.ok {
+                    ui::chip("Ready", Some(icons::CHECK), theme::green()).into_any_element()
+                } else if let Some(fix) = check.fix.clone() {
+                    ui::button(("ob-setup-copy", i), "Copy Command", Btn::Outline).on_click(move |_, _, cx| cx.write_to_clipboard(gpui::ClipboardItem::new_string(fix.clone()))).into_any_element()
+                } else {
+                    ui::chip("Not set up", None, theme::amber()).into_any_element()
+                };
+                div()
+                    .child(ui::row(None, check.title, Some(check.detail.clone().into()), trailing))
+                    .when_some(check.fix.clone().filter(|_| !check.ok), |d, fix| {
+                        d.child(div().pb(px(10.)).px(px(12.)).child(div().px(px(8.)).py(px(4.)).rounded(px(6.)).bg(theme::bg()).font_family(theme::MONO).text_size(px(theme::SUBHEAD)).child(fix)))
+                    })
+                    .into_any_element()
+            })
+            .collect();
+        div()
+            .flex_1()
+            .flex()
+            .flex_col()
+            .child(Self::header("Set Up Dictation", "Meetings need nothing more: your mic and system audio come straight from PipeWire. To dictate into any app, Stenly needs two things from your desktop."))
+            .child(ui::card(rows))
+            .child(div().px(px(2.)).pt(px(8.)).text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child("Dictation is optional. Run the commands in a terminal; this page updates by itself."))
+            .child(div().flex_1())
+            .child(self.footer("Continue", true, None, cx))
             .into_any_element()
     }
 
@@ -484,9 +550,9 @@ impl Onboarding {
             .flex()
             .flex_col()
             .gap(px(14.))
-            .child(Self::header("Connect Your Calendar", if google_first {
+            .child(Self::header("Connect Your Calendar", ui::os(if google_first {
                 "Sign in with Google, or use the calendars already on this Mac. Stenly pops up a minute before a meeting with a Zoom, Meet or Teams link."
-            } else if eventkit { "Stenly reads the calendars already on this Mac and pops up a minute before a meeting with a Zoom, Meet or Teams link." } else { "Add a private or shared ICS calendar link. Stenly will pop up a minute before meetings with a Zoom, Meet or Teams link." }))
+            } else if eventkit { "Stenly reads the calendars already on this Mac and pops up a minute before a meeting with a Zoom, Meet or Teams link." } else { "Add a private or shared ICS calendar link. Stenly will pop up a minute before meetings with a Zoom, Meet or Teams link." })))
             .when_some(google_block, |d, g| d.child(g))
             .child(body)
             .child(div().flex_1())
@@ -560,7 +626,7 @@ impl Onboarding {
         };
         let llm = stenly_core::ollama::find(&cfg.llm.model).copied().unwrap_or(stenly_core::ollama::CATALOG[0]);
         let local_detail = if ollama.running && llm_ok {
-            div().text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child(format!("Ollama and {} are ready · summaries stay on this Mac.", llm.name)).into_any_element()
+            div().text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child(ui::os_fmt(format!("Ollama and {} are ready · summaries stay on this Mac.", llm.name))).into_any_element()
         } else if ollama.running {
             div().text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child(format!("Ollama is ready. Download {} ({:.1} GB) to write local summaries.", llm.name, llm.size_gb)).into_any_element()
         } else {
@@ -660,7 +726,7 @@ impl Onboarding {
         };
         let field = |label: &'static str, input: Entity<TextInput>| div().flex().items_center().gap(px(12.)).min_h(px(40.)).child(div().w(px(78.)).flex_shrink_0().text_size(px(theme::BODY)).child(label)).child(ui::text_field(input));
         let api_status: AnyElement = match api_test {
-            crate::controller::ApiTest::Idle => div().text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child(if api_key_saved { "Key is saved in your Keychain." } else { "Your key is stored in the Keychain, never in config.toml." }).into_any_element(),
+            crate::controller::ApiTest::Idle => div().text_size(px(theme::SUBHEAD)).text_color(theme::muted()).child(ui::os(if api_key_saved { "Key is saved in your Keychain." } else { "Your key is stored in the Keychain, never in config.toml." })).into_any_element(),
             crate::controller::ApiTest::Running => ui::pending("ob-api-test", "Testing…").into_any_element(),
             crate::controller::ApiTest::Ok(msg) => div().text_size(px(theme::SUBHEAD)).text_color(theme::green()).child(msg).into_any_element(),
             crate::controller::ApiTest::Failed(msg) => div().text_size(px(theme::SUBHEAD)).text_color(theme::amber()).child(msg).into_any_element(),
@@ -674,12 +740,12 @@ impl Onboarding {
         ]));
 
         div().flex_1().flex().flex_col()
-            .child(Self::header("Notes, with or without AI", "Transcription runs on this Mac. Your first meeting always becomes a Markdown note with attendees and a transcript."))
+            .child(Self::header("Notes, with or without AI", ui::os("Transcription runs on this Mac. Your first meeting always becomes a Markdown note with attendees and a transcript.")))
             .child(ui::card(vec![ui::row(Some(icons::WAVE), format!("{} · transcription", asr.name), Some(format!("NVIDIA · {} · {} MB", asr.language, asr.approx_mb).into()), asr_status).into_any_element()]))
             .when_some(asr_note, |d, n| d.child(n))
             .child(ui::caption("Summaries (optional)"))
             .child(ui::card(vec![
-                ui::row(Some(icons::SPARKLES), "Local · Ollama", Some("Summaries stay on this Mac.".into()), select_local).into_any_element(),
+                ui::row(Some(icons::SPARKLES), "Local · Ollama", Some(ui::os("Summaries stay on this Mac.")), select_local).into_any_element(),
                 div().px(px(16.)).pb(px(12.)).child(local_detail).child(div().pt(px(8.)).child(local_action)).into_any_element(),
                 ui::row(Some(icons::LOCK), "Cloud · Sign in with ChatGPT", Some(chatgpt_desc), select_chatgpt).into_any_element(),
                 ui::row(Some(icons::LOCK), "Cloud · your API key", Some("Use an OpenAI-compatible provider.".into()), select_api).into_any_element(),
@@ -773,7 +839,7 @@ impl Onboarding {
                     .text_size(px(theme::BODY))
                     .line_height(px(18.))
                     .text_color(theme::muted())
-                    .child("Stenly lives in your menu bar. Before a meeting starts it'll pop up in the corner: click Record and forget about it. Notes appear when the call ends."),
+                    .child(ui::os("Stenly lives in your menu bar. Before a meeting starts it'll pop up in the corner: click Record and forget about it. Notes appear when the call ends.")),
             )
             .child({
                 let key = stenly_core::platform::Hotkey::parse(&c.config.dictation.shortcut).map(|h| h.label());
