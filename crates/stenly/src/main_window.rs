@@ -114,9 +114,14 @@ pub struct MainWindow {
     _subs: Vec<Subscription>,
 }
 
+/// The main window's title; also how the desktop finds it to raise it.
+const TITLE: &str = "Stenly";
+
 pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) -> Option<WindowHandle<MainWindow>> {
     for w in cx.windows() {
         if let Some(h) = w.downcast::<MainWindow>() {
+            // Before activating: that can switch to the window's workspace.
+            controller.read(cx).shell.raise_window(TITLE);
             let _ = h.update(cx, |this, window, cx| {
                 if let Some(p) = page {
                     this.page = p;
@@ -137,12 +142,13 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
         .and_then(|v| v.split_once('x').and_then(|(w, h)| Some((w.parse().ok()?, h.parse().ok()?))))
         .unwrap_or((980., 700.));
     let bounds = Bounds::centered(None, size(px(w), px(h)), cx);
+    let shell = controller.read(cx).shell.clone();
     let handle = cx
         .open_window(
             WindowOptions {
                 window_bounds: Some(WindowBounds::Windowed(bounds)),
                 titlebar: Some(TitlebarOptions {
-                    title: Some("Stenly".into()),
+                    title: Some(TITLE.into()),
                     appears_transparent: true,
                     // Unified toolbar height (52pt): lights centred in it.
                     traffic_light_position: Some(gpui::point(px(18.), px(18.))),
@@ -729,6 +735,7 @@ pub fn open(controller: Entity<Controller>, page: Option<Page>, cx: &mut App) ->
         )
         .ok()?;
     cx.activate(true);
+    shell.raise_window(TITLE);
     Some(handle)
 }
 

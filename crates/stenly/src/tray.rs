@@ -86,6 +86,19 @@ mod real {
 
             let ids = (toggle.id().clone(), open.id().clone(), notes.id().clone(), quit.id().clone(), dictate.id().clone(), history.id().clone(), status.id().clone(), update.id().clone());
             let shortcut_ids = (shortcut_status.id().clone(), show_blocker.id().clone());
+            // Linux panels send a plain left click as "activate" (the menu is on
+            // right click), so open the window like a launcher icon would.
+            // macOS shows the menu on left click and never sends this.
+            #[cfg(not(target_os = "macos"))]
+            {
+                use tray_icon::{MouseButton, TrayIconEvent};
+                let commands = commands.clone();
+                TrayIconEvent::set_event_handler(Some(move |e: TrayIconEvent| {
+                    if let TrayIconEvent::Click { button: MouseButton::Left, .. } = e {
+                        let _ = commands.send(TrayCommand::OpenWindow);
+                    }
+                }));
+            }
             let toggle_state = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
             let ts = toggle_state.clone();
             MenuEvent::set_event_handler(Some(move |e: MenuEvent| {

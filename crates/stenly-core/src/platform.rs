@@ -294,6 +294,11 @@ pub trait DesktopShell {
     /// Move a window so its top-left is at `(x, y)` in top-left-origin global
     /// screen points (gpui's coordinate space).
     fn move_window(&self, _raw: *mut std::ffi::c_void, _x: f64, _y: f64) {}
+    /// Bring our window titled `title` to the front on the user's current
+    /// workspace, where the app's own activation request isn't enough (Wayland
+    /// rejects it unless the user just interacted with that app, so a tray
+    /// click or a second launch leaves the window underneath other apps).
+    fn raise_window(&self, _title: &str) {}
     fn supports_hide_from_capture(&self) -> bool {
         false
     }
