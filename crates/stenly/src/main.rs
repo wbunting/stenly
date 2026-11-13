@@ -19,6 +19,8 @@ mod meeting_browser;
 mod menus;
 mod onboarding;
 mod popup;
+#[cfg(target_os = "linux")]
+mod reopen;
 mod search_palette;
 mod shortcut_field;
 mod squircle;
@@ -47,7 +49,14 @@ fn main() {
             std::process::exit(1);
         }
     };
+    #[cfg_attr(not(target_os = "linux"), allow(unused_variables))]
+    let data_dir = config.paths().data_dir;
     if let Err(e) = single_instance_lock(&config) {
+        #[cfg(target_os = "linux")]
+        if reopen::ask_running_instance(&data_dir) {
+            eprintln!("Stenly: already running; showing its window");
+            std::process::exit(0);
+        }
         eprintln!("Stenly: {e:#}");
         std::process::exit(0);
     }
@@ -182,6 +191,8 @@ fn main() {
 
         // Tray: commands come in on a channel, state goes out on every controller change.
         let (tray_tx, tray_rx) = crossbeam_channel::unbounded::<TrayCommand>();
+        #[cfg(target_os = "linux")]
+        reopen::listen(&data_dir, tray_tx.clone());
         let tray: Rc<std::cell::RefCell<Box<dyn Tray>>> = Rc::new(std::cell::RefCell::new(make_tray(tray_tx)));
         {
             let tray = tray.clone();

@@ -8,6 +8,7 @@
 mod hotkey;
 mod inject;
 mod mic_activity;
+mod raise;
 mod setup;
 
 use crate::Platform;
@@ -95,6 +96,9 @@ struct LinuxShell;
 impl DesktopShell for LinuxShell {
     fn setup_checks(&self) -> Vec<SetupCheck> {
         setup::checks()
+    }
+    fn raise_window(&self, title: &str) {
+        raise::raise_window(title)
     }
 }
 
