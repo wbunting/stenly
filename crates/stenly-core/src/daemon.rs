@@ -410,6 +410,89 @@ mod tests {
     }
 
     #[test]
+    fn angle_bracket_titles_save_summaries_and_clear_retry_errors() {
+        // Exercise both a short call and the part-by-part path used by long calls.
+        for turns in [2, 112] {
+            let tmp = tempdir().unwrap();
+            let dir = tmp.path().join("meeting");
+            std::fs::create_dir_all(&dir).unwrap();
+            let title = "Example Labs <> Alex";
+            let mut meta = test_meta(title);
+            meta.state = SessionState::Done;
+            meta.error =
+                Some("Summary failed: the model returned the template instead of a summary".into());
+            meta.save(&dir).unwrap();
+            let transcript = Transcript::from_channels(
+                (0..turns)
+                    .map(|i| {
+                        let channel = if i % 2 == 0 { Channel::Mic } else { Channel::System };
+                        Segment::new(channel, i as f64 * 30.0, (i + 1) as f64 * 30.0, "We agreed to start the pilot next month and review the results together.")
+                    })
+                    .collect(),
+            );
+            std::fs::write(
+                dir.join("transcript.json"),
+                serde_json::to_vec(&transcript).unwrap(),
+            )
+            .unwrap();
+            let expected = summary::Summary {
+                title: Some(title.into()),
+                summary: "The teams agreed to start the pilot next month.".into(),
+                template: Some("general".into()),
+                ..Default::default()
+            };
+            let response = serde_json::to_string(&expected).unwrap();
+            let server = crate::destinations::testutil::MockServer::start(move |req| {
+                let body = req.json();
+                let content = if body["response_format"]["type"] == "json_object" {
+                    response.clone()
+                } else {
+                    "## Pilot\n- The teams agreed to start the pilot next month.".into()
+                };
+                (
+                    200,
+                    serde_json::json!({ "choices": [{ "message": { "content": content } }] })
+                        .to_string(),
+                )
+            });
+            let mut cfg = Config::default();
+            cfg.output.notes_dir = tmp.path().join("notes").to_string_lossy().to_string();
+            cfg.output.audio_dir = tmp.path().join("recordings").to_string_lossy().to_string();
+            cfg.llm.endpoint = format!("{}/v1", server.url);
+            cfg.llm.api_key_env.clear();
+            cfg.asr.speaker_names = false;
+            let mut progress = vec![];
+            let out = process_session(&cfg, &dir, &mut NoopTranscriber, &mut |p| progress.push(p))
+                .unwrap();
+
+            assert!(progress.iter().any(|p| matches!(p, Progress::Summarizing)));
+            assert_eq!(out.summary, Some(expected.clone()));
+            let saved: summary::Summary =
+                serde_json::from_slice(&std::fs::read(dir.join("summary.json")).unwrap()).unwrap();
+            assert_eq!(saved, expected);
+            let meta = SessionMeta::load(&dir).unwrap();
+            assert_eq!(meta.state, SessionState::Done);
+            assert!(meta.error.is_none());
+            let note = std::fs::read_to_string(out.note).unwrap();
+            assert!(note.contains(&format!("# {title}")));
+            assert!(note.contains(&format!("## Summary\n\n{}", expected.summary)));
+            assert!(!note.contains("Summary failed"));
+            let requests = server.requests();
+            // Local backends are probed at /models before the summary call.
+            assert!(requests.iter().all(|r| r.path == "/v1/models" || r.path == "/v1/chat/completions"));
+            let completions = requests.iter().filter(|r| r.path == "/v1/chat/completions").count();
+            if turns == 2 {
+                assert_eq!(completions, 1);
+            } else {
+                assert!(
+                    completions > 1,
+                    "long calls must summarize parts before merging"
+                );
+            }
+        }
+    }
+
+    #[test]
     fn failed_retry_preserves_an_existing_summary() {
         let tmp = tempdir().unwrap();
         let dir = tmp.path().join("meeting");

@@ -868,8 +868,24 @@ pub fn parse_summary(content: &str) -> Result<Summary> {
     let start = s.find('{').context("no JSON object")?;
     let end = s.rfind('}').context("no JSON object")?;
     let sm: Summary = serde_json::from_str(&s[start..=end])?;
-    // Some models echo the schema instead of filling it in.
-    let echoed = |t: &str| t.contains("<") && t.contains(">") || t.starts_with("3-6 word") || t == "1-2 sentence overview";
+    // Some models echo the schema instead of filling it in. Match its actual
+    // placeholders, not angle brackets in real titles ("Example Labs <> Alex"),
+    // markup, or comparisons in the overview.
+    let echoed = |t: &str| {
+        let t = t.trim();
+        let t = t
+            .strip_prefix('<')
+            .and_then(|s| s.strip_suffix('>'))
+            .unwrap_or(t)
+            .trim();
+        matches!(
+            t,
+            "3-6 word title"
+                | "3-6 word title naming the main topic actually discussed; no dates or times"
+                | "1-2 sentence overview"
+                | "1-2 sentence overview of what was discussed and decided"
+        )
+    };
     if echoed(&sm.summary) || sm.title.as_deref().is_some_and(echoed) {
         anyhow::bail!("the model returned the template instead of a summary");
     }
@@ -1220,6 +1236,55 @@ mod tests {
         assert_eq!(s.summary, "x");
         assert_eq!(s.action_items[0].task, "t");
         assert!(s.decisions.is_empty());
+    }
+
+    #[test]
+    fn parses_real_content_with_angle_brackets() {
+        for (title, overview) in [
+            (
+                "Example Labs <> Alex",
+                "The teams agreed to start the pilot next month.",
+            ),
+            (
+                "Example Labs < > Alex",
+                "Keep latency < 100 ms and throughput > 50 requests per second.",
+            ),
+            (
+                "Review <draft>",
+                "Use the <title> element for the page name.",
+            ),
+        ] {
+            let content = serde_json::json!({ "title": title, "summary": overview }).to_string();
+            let parsed = parse_summary(&content).unwrap();
+            assert_eq!(parsed.title.as_deref(), Some(title));
+            assert_eq!(parsed.summary, overview);
+        }
+    }
+
+    #[test]
+    fn rejects_echoed_summary_placeholders() {
+        for placeholder in [
+            "3-6 word title",
+            "3-6 word title naming the main topic actually discussed; no dates or times",
+            "1-2 sentence overview",
+            "1-2 sentence overview of what was discussed and decided",
+        ] {
+            for value in [
+                placeholder.to_string(),
+                format!("<{placeholder}>"),
+                format!("  <{placeholder}>  "),
+            ] {
+                for field in ["title", "summary"] {
+                    let mut content = serde_json::json!({ "title": "Pilot planning", "summary": "The teams agreed on a pilot." });
+                    content[field] = serde_json::json!(value);
+                    let error = parse_summary(&content.to_string()).unwrap_err();
+                    assert_eq!(
+                        error.to_string(),
+                        "the model returned the template instead of a summary"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
