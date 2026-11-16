@@ -71,18 +71,27 @@ mod real {
             // Not in the menu until a newer release is found (see set_update).
             let update = MenuItem::new("Update available", true, None);
             let menu = Menu::new();
-            menu.append(&status)?;
-            menu.append(&PredefinedMenuItem::separator())?;
-            menu.append(&toggle)?;
-            menu.append(&dictate)?;
-            menu.append(&shortcut_status)?;
-            menu.append(&show_blocker)?;
-            menu.append(&PredefinedMenuItem::separator())?;
-            menu.append(&history)?;
-            menu.append(&open)?;
-            menu.append(&notes)?;
-            menu.append(&PredefinedMenuItem::separator())?;
-            menu.append(&quit)?;
+            if MINIMAL {
+                // Linux: the window has everything else, and a long tray menu
+                // is what desktop shells mistake for the app's menu bar.
+                menu.append(&toggle)?;
+                menu.append(&open)?;
+                menu.append(&PredefinedMenuItem::separator())?;
+                menu.append(&quit)?;
+            } else {
+                menu.append(&status)?;
+                menu.append(&PredefinedMenuItem::separator())?;
+                menu.append(&toggle)?;
+                menu.append(&dictate)?;
+                menu.append(&shortcut_status)?;
+                menu.append(&show_blocker)?;
+                menu.append(&PredefinedMenuItem::separator())?;
+                menu.append(&history)?;
+                menu.append(&open)?;
+                menu.append(&notes)?;
+                menu.append(&PredefinedMenuItem::separator())?;
+                menu.append(&quit)?;
+            }
 
             let ids = (toggle.id().clone(), open.id().clone(), notes.id().clone(), quit.id().clone(), dictate.id().clone(), history.id().clone(), status.id().clone(), update.id().clone());
             let shortcut_ids = (shortcut_status.id().clone(), show_blocker.id().clone());
@@ -143,6 +152,10 @@ mod real {
         }
     }
 
+    /// macOS keeps the full menubar menu (it is the app's only menu while the
+    /// window is closed); elsewhere the tray menu is the bare minimum.
+    const MINIMAL: bool = !cfg!(target_os = "macos");
+
     static TOGGLE_STATE: std::sync::OnceLock<std::sync::Arc<std::sync::atomic::AtomicBool>> = std::sync::OnceLock::new();
 
     impl Tray for TrayIconTray {
@@ -179,6 +192,9 @@ mod real {
         }
 
         fn set_update(&mut self, version: Option<&str>) {
+            if MINIMAL {
+                return;
+            }
             match version {
                 Some(v) => {
                     self.update.set_text(format!("Update available: {v}"));

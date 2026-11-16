@@ -62,6 +62,16 @@ pub fn is_open(cx: &App) -> bool {
 /// another Stenly window and pulls focus away from where the user is typing.
 pub fn set_visible(dictation: Entity<DictationController>, shell: &dyn DesktopShell, visible: bool, cx: &mut App) {
     let existing = cx.windows().into_iter().find_map(|w| w.downcast::<DictationHud>());
+    // Only AppKit can order a window out and back in. Elsewhere close it when
+    // idle (it never takes focus there, so closing can't move key focus) and
+    // open a fresh one for the next dictation.
+    #[cfg(not(target_os = "macos"))]
+    if !visible {
+        if let Some(h) = existing {
+            let _ = h.update(cx, |_, window, _| window.remove_window());
+        }
+        return;
+    }
     match existing {
         Some(h) => {
             let _ = h.update(cx, |hud, window, cx| {
@@ -120,21 +130,24 @@ pub fn show(dictation: Entity<DictationController>, shell: &dyn DesktopShell, cx
             point(b.origin.x + (b.size.width - px(W)) / 2., b.origin.y + b.size.height - px(H + BOTTOM_GAP - MARGIN))
         })
         .unwrap_or(point(px(600.), px(800.)));
-    let opts = WindowOptions {
+    let display_id = display.map(|d| d.id());
+    let opts = |kind: WindowKind| WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds { origin, size: size(px(W), px(H)) })),
         titlebar: None,
         focus: false,
         show: true,
-        kind: WindowKind::PopUp,
+        kind,
         is_movable: true,
         is_resizable: false,
         is_minimizable: false,
-        display_id: display.map(|d| d.id()),
+        display_id,
         window_background: WindowBackgroundAppearance::Transparent,
         app_id: Some("stenly".into()),
         ..Default::default()
     };
-    let res = cx.open_window(opts, |window, cx| {
+    // Anchored to the bottom edge, so growing for the preview grows upward.
+    let placement = crate::overlay::Placement::BottomCentre { bottom: px(BOTTOM_GAP - MARGIN) };
+    let res = crate::overlay::open(cx, "dictation", placement, opts, |window, cx| {
         crate::configure_native(window, shell);
         if let Ok(h) = raw_window_handle::HasWindowHandle::window_handle(window) {
             if let raw_window_handle::RawWindowHandle::AppKit(a) = h.as_raw() {

@@ -87,12 +87,12 @@ pub fn show(controller: Entity<Controller>, shell: &dyn DesktopShell, cx: &mut A
     let display = target_display(&controller, cx);
     let origin = display.as_ref().map(|d| pill_origin(d.as_ref())).unwrap_or(point(px(80.), px(200.)));
     let display_id = display.as_ref().map(|d| d.id());
-    let opts = WindowOptions {
+    let opts = |kind: WindowKind| WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds { origin, size: size(px(W), px(H)) })),
         titlebar: None,
         focus: false,
         show: true,
-        kind: WindowKind::PopUp,
+        kind,
         is_movable: true,
         is_resizable: false,
         is_minimizable: false,
@@ -101,7 +101,8 @@ pub fn show(controller: Entity<Controller>, shell: &dyn DesktopShell, cx: &mut A
         app_id: Some("stenly".into()),
         ..Default::default()
     };
-    let res = cx.open_window(opts, |window, cx| {
+    let placement = crate::overlay::Placement::RightCentre { right: px(EDGE_GAP - MARGIN) };
+    let res = crate::overlay::open(cx, "recording", placement, opts, |window, cx| {
         crate::configure_native(window, shell);
         if let Ok(h) = raw_window_handle::HasWindowHandle::window_handle(window) {
             if let raw_window_handle::RawWindowHandle::AppKit(a) = h.as_raw() {
