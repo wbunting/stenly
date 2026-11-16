@@ -63,7 +63,8 @@ pub fn open<V: 'static + Render>(
 ) -> anyhow::Result<WindowHandle<V>> {
     let mut build = Some(build);
     #[cfg(all(target_os = "linux", feature = "wayland"))]
-    if cx.compositor_name() == "Wayland" {
+    // Dev: STENLY_OVERLAY_WINDOWS=1 forces the pop-up-window fallback.
+    if cx.compositor_name() == "Wayland" && std::env::var_os("STENLY_OVERLAY_WINDOWS").is_none() {
         match cx.open_window(opts(layer_kind(name, placement)), |w, cx| {
             (build.take().expect("built once"))(w, cx)
         }) {
