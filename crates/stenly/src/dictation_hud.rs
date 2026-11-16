@@ -142,7 +142,7 @@ pub fn show(dictation: Entity<DictationController>, shell: &dyn DesktopShell, cx
         is_minimizable: false,
         display_id,
         window_background: WindowBackgroundAppearance::Transparent,
-        app_id: Some("stenly".into()),
+        app_id: Some(crate::overlay::APP_ID.into()),
         ..Default::default()
     };
     // Anchored to the bottom edge, so growing for the preview grows upward.

@@ -98,7 +98,7 @@ pub fn show(controller: Entity<Controller>, shell: &dyn DesktopShell, cx: &mut A
         is_minimizable: false,
         display_id,
         window_background: WindowBackgroundAppearance::Transparent,
-        app_id: Some("stenly".into()),
+        app_id: Some(crate::overlay::APP_ID.into()),
         ..Default::default()
     };
     let placement = crate::overlay::Placement::RightCentre { right: px(EDGE_GAP - MARGIN) };

@@ -9,6 +9,11 @@
 
 use gpui::{App, Entity, Pixels, Render, Window, WindowHandle, WindowKind, WindowOptions};
 
+/// App id (Wayland) / WM_CLASS (X11) of the pop-up-window fallback, separate
+/// from the main window's "stenly" so window managers can float them without
+/// touching the main window (for example Hyprland: `class = "^stenly-overlay$"`).
+pub const APP_ID: &str = "stenly-overlay";
+
 /// Where an overlay sits on its screen (used for layer-shell surfaces only;
 /// pop-up windows keep the origin in their `WindowOptions`).
 #[derive(Clone, Copy, Debug)]

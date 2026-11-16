@@ -95,7 +95,7 @@ pub fn show(kind: PopupKind, controller: Entity<Controller>, shell: &dyn Desktop
         is_minimizable: false,
         display_id,
         window_background: WindowBackgroundAppearance::Transparent,
-        app_id: Some("stenly".into()),
+        app_id: Some(crate::overlay::APP_ID.into()),
         ..Default::default()
     };
     let placement = crate::overlay::Placement::TopRight { top: px(12.), right: px(16.) };
