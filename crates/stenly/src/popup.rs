@@ -83,21 +83,23 @@ pub fn show(kind: PopupKind, controller: Entity<Controller>, shell: &dyn Desktop
         _ => (None, false),
     };
     let height = if matches!(&kind, PopupKind::ShortcutBlocked(_)) { 164. } else if brief.is_some() { H_BRIEF } else if hint { H_HINT } else { H };
-    let opts = WindowOptions {
+    let display_id = display.map(|d| d.id());
+    let opts = |kind: WindowKind| WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(Bounds { origin, size: size(px(W), px(height)) })),
         titlebar: None,
         focus: false,
         show: true,
-        kind: WindowKind::PopUp,
+        kind,
         is_movable: false,
         is_resizable: false,
         is_minimizable: false,
-        display_id: display.map(|d| d.id()),
+        display_id,
         window_background: WindowBackgroundAppearance::Transparent,
-        app_id: Some("stenly".into()),
+        app_id: Some(crate::overlay::APP_ID.into()),
         ..Default::default()
     };
-    let res = cx.open_window(opts, |window, cx| {
+    let placement = crate::overlay::Placement::TopRight { top: px(12.), right: px(16.) };
+    let res = crate::overlay::open(cx, "prompt", placement, opts, |window, cx| {
         crate::configure_native(window, shell);
         if let Ok(h) = raw_window_handle::HasWindowHandle::window_handle(window)
             && let raw_window_handle::RawWindowHandle::AppKit(a) = h.as_raw() {

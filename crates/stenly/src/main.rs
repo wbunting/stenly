@@ -18,6 +18,7 @@ mod meeting_view;
 mod meeting_browser;
 mod menus;
 mod onboarding;
+mod overlay;
 mod popup;
 #[cfg(target_os = "linux")]
 mod reopen;
