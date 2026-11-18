@@ -11,9 +11,15 @@
 
 use anyhow::{Result, bail};
 use crossbeam_channel::Sender;
+use std::collections::HashSet;
 use std::io::Read;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+/// How often to look for keyboards plugged in after the listener started.
+const RESCAN: Duration = Duration::from_secs(1);
 use stenly_core::platform::{Hotkey, HotkeyEvent, Hotkeys};
 
 const EV_KEY: u16 = 1;
@@ -233,42 +239,16 @@ impl Hotkeys for LinuxHotkeys {
         if self.started.swap(true, Ordering::SeqCst) {
             return Ok(());
         }
-        let devs = keyboards();
-        let mut opened = 0;
-        let mut denied = false;
         let generation = self.generation.load(Ordering::SeqCst);
-        for dev in devs {
-            match std::fs::File::open(&dev) {
-                Ok(mut f) => {
-                    opened += 1;
-                    let state = self.state.clone();
-                    let esc = self.capture_escape.clone();
-                    let gen_ = self.generation.clone();
-                    std::thread::Builder::new().name("stenly-keys".into()).spawn(move || {
-                        let mut buf = [0u8; 24];
-                        while gen_.load(Ordering::SeqCst) == generation {
-                            if f.read_exact(&mut buf).is_err() {
-                                break; // unplugged
-                            }
-                            let sec = i64::from_ne_bytes(buf[0..8].try_into().unwrap());
-                            let usec = i64::from_ne_bytes(buf[8..16].try_into().unwrap());
-                            let typ = u16::from_ne_bytes(buf[16..18].try_into().unwrap());
-                            let code = u16::from_ne_bytes(buf[18..20].try_into().unwrap());
-                            let value = i32::from_ne_bytes(buf[20..24].try_into().unwrap());
-                            if typ != EV_KEY {
-                                continue;
-                            }
-                            let at = sec as f64 + usec as f64 / 1e6;
-                            if let Ok(mut st) = state.lock() {
-                                handle(&mut st, code, value, at, &esc);
-                            }
-                        }
-                    })?;
-                }
-                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => denied = true,
-                Err(_) => {}
-            }
-        }
+        let reader = Reader {
+            state: self.state.clone(),
+            esc: self.capture_escape.clone(),
+            generation: self.generation.clone(),
+            current: generation,
+            open: Arc::new(Mutex::new(HashSet::new())),
+            discover: Arc::new(keyboards),
+        };
+        let (opened, denied) = reader.open_new()?;
         if opened == 0 {
             self.started.store(false, Ordering::SeqCst);
             if denied {
@@ -276,6 +256,18 @@ impl Hotkeys for LinuxHotkeys {
             }
             bail!("no keyboard found under /dev/input");
         }
+        // Keyboards plugged in later (or reconnected) get their own reader.
+        std::thread::Builder::new().name("stenly-keys-scan".into()).spawn(move || {
+            while reader.live() {
+                std::thread::sleep(RESCAN);
+                if !reader.live() {
+                    break;
+                }
+                if let Err(e) = reader.open_new() {
+                    tracing::warn!(error = %format!("{e:#}"), "couldn't watch a new keyboard");
+                }
+            }
+        })?;
         Ok(())
     }
 
@@ -289,6 +281,72 @@ impl Hotkeys for LinuxHotkeys {
 
     fn set_capture_escape(&self, on: bool) {
         self.capture_escape.store(on, Ordering::Relaxed);
+    }
+}
+
+/// Opens keyboards for one listener generation and remembers which are open,
+/// so a rescan only adds new devices and an unplugged one can come back.
+#[derive(Clone)]
+struct Reader {
+    state: Arc<Mutex<State>>,
+    esc: Arc<AtomicBool>,
+    generation: Arc<AtomicU64>,
+    current: u64,
+    open: Arc<Mutex<HashSet<PathBuf>>>,
+    discover: Arc<dyn Fn() -> Vec<PathBuf> + Send + Sync>,
+}
+
+impl Reader {
+    fn live(&self) -> bool {
+        self.generation.load(Ordering::SeqCst) == self.current
+    }
+
+    /// Start a reader for each keyboard not already watched. Returns how many
+    /// keyboards are now watched and whether any was refused.
+    fn open_new(&self) -> Result<(usize, bool)> {
+        let mut denied = false;
+        for dev in (self.discover)() {
+            if self.open.lock().unwrap().contains(&dev) {
+                continue;
+            }
+            match std::fs::File::open(&dev) {
+                Ok(f) => {
+                    self.open.lock().unwrap().insert(dev.clone());
+                    tracing::info!(device = %dev.display(), "watching keyboard for dictation shortcuts");
+                    let r = self.clone();
+                    let path = dev.clone();
+                    if let Err(e) = std::thread::Builder::new().name("stenly-keys".into()).spawn(move || r.read(f, path)) {
+                        self.open.lock().unwrap().remove(&dev);
+                        return Err(e.into());
+                    }
+                }
+                Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => denied = true,
+                Err(_) => {}
+            }
+        }
+        Ok((self.open.lock().unwrap().len(), denied))
+    }
+
+    fn read(self, mut f: std::fs::File, dev: PathBuf) {
+        let mut buf = [0u8; 24];
+        while self.live() {
+            if f.read_exact(&mut buf).is_err() {
+                break; // unplugged
+            }
+            let sec = i64::from_ne_bytes(buf[0..8].try_into().unwrap());
+            let usec = i64::from_ne_bytes(buf[8..16].try_into().unwrap());
+            let typ = u16::from_ne_bytes(buf[16..18].try_into().unwrap());
+            let code = u16::from_ne_bytes(buf[18..20].try_into().unwrap());
+            let value = i32::from_ne_bytes(buf[20..24].try_into().unwrap());
+            if typ != EV_KEY {
+                continue;
+            }
+            let at = sec as f64 + usec as f64 / 1e6;
+            if let Ok(mut st) = self.state.lock() {
+                handle(&mut st, code, value, at, &self.esc);
+            }
+        }
+        self.open.lock().unwrap().remove(&dev);
     }
 }
 
@@ -326,5 +384,62 @@ mod tests {
         handle(&mut st, 47, 1, 2.1, &esc);
         // meta press also counts for slot 0? No: LEFTMETA isn't RIGHTMETA
         assert!(matches!(rx.try_recv(), Ok(HotkeyEvent::Pressed { slot: 1, .. })));
+    }
+
+    /// A keyboard that appears after listening started (the external keyboard
+    /// plugged in after launch) is picked up by the next rescan.
+    #[test]
+    fn keyboard_plugged_in_later_is_heard() {
+        use std::io::Write;
+        let dir = std::env::temp_dir().join(format!("stenly-keys-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let fifo = |name: &str| {
+            let p = dir.join(name);
+            assert!(std::process::Command::new("mkfifo").arg(&p).status().unwrap().success());
+            // read+write never blocks on a FIFO, and keeps the reader from hitting EOF.
+            std::fs::OpenOptions::new().read(true).write(true).open(&p).unwrap()
+        };
+        let _builtin = fifo("event1");
+        let (tx, rx) = crossbeam_channel::unbounded();
+        let state = Arc::new(Mutex::new(State {
+            binds: vec![Some(Bind::Combo { code: 57, ctrl: false, alt: true, shift: false, meta: false })],
+            held: vec![false],
+            sink: Some(tx),
+            mods: Mods::default(),
+        }));
+        let list = dir.clone();
+        let reader = Reader {
+            state,
+            esc: Arc::new(AtomicBool::new(false)),
+            generation: Arc::new(AtomicU64::new(0)),
+            current: 0,
+            open: Arc::new(Mutex::new(HashSet::new())),
+            discover: Arc::new(move || {
+                let mut v: Vec<PathBuf> = std::fs::read_dir(&list).unwrap().flatten().map(|e| e.path()).collect();
+                v.sort();
+                v
+            }),
+        };
+        assert_eq!(reader.open_new().unwrap().0, 1);
+
+        let mut external = fifo("event7");
+        assert_eq!(reader.open_new().unwrap().0, 2, "rescan opens the new keyboard");
+        assert_eq!(reader.open_new().unwrap().0, 2, "and doesn't open it twice");
+        let ev = |code: u16, value: i32| {
+            let mut b = [0u8; 24];
+            b[16..18].copy_from_slice(&EV_KEY.to_ne_bytes());
+            b[18..20].copy_from_slice(&code.to_ne_bytes());
+            b[20..24].copy_from_slice(&value.to_ne_bytes());
+            b
+        };
+        // Option+Space on the late keyboard.
+        for (code, value) in [(KEY_LEFTALT, 1), (57, 1), (57, 0), (KEY_LEFTALT, 0)] {
+            external.write_all(&ev(code, value)).unwrap();
+        }
+        let got = rx.recv_timeout(std::time::Duration::from_secs(2));
+        assert!(matches!(got, Ok(HotkeyEvent::Pressed { slot: 0, .. })), "{got:?}");
+        reader.generation.fetch_add(1, Ordering::SeqCst);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
