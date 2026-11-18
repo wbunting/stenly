@@ -402,10 +402,18 @@ impl MainWindow {
             })
             .collect();
 
+        let default_mic = mics.iter().find(|m| m.is_default).map(|m| m.name.clone());
+        let mut using_default = match &default_mic {
+            Some(n) => format!("the system default, {n}"),
+            None => "the system default".to_string(),
+        };
+        if cfg!(target_os = "macos") {
+            using_default.push_str(" (or another mic when the laptop lid is closed)");
+        }
         let summary = match &active {
             Some(a) => format!("Recording from {} (first connected in your list).", name_of(a)),
-            None if prio.is_empty() => "No list yet: Stenly uses the system default microphone (or another mic when the laptop lid is closed).".to_string(),
-            None => "None of your microphones are connected: using the system default.".to_string(),
+            None if prio.is_empty() => format!("No list yet: recording from {using_default}."),
+            None => format!("None of your microphones are connected: recording from {using_default}."),
         };
         div()
             .flex()

@@ -69,26 +69,79 @@ impl AudioBackend for LinuxAudio {
         "linux-cpal"
     }
     fn start_mic(&self, sink: Sender<AudioChunk>) -> Result<Box<dyn CaptureStream>> {
-        crate::cpal_mic::start_input_on_thread("mic", || host().default_input_device().context("no default microphone"), sink)
+        crate::cpal_mic::start_input_on_thread("mic", default_mic, sink)
     }
     fn start_system(&self, sink: Sender<AudioChunk>) -> Result<Box<dyn CaptureStream>> {
         crate::cpal_mic::start_input_on_thread("system", system_device, sink)
     }
     fn input_devices(&self) -> Vec<stenly_core::platform::InputDevice> {
-        // Monitors of outputs are capture devices too on Linux; hide them.
-        crate::cpal_mic::input_devices(&host()).into_iter().filter(|d| !d.name.to_lowercase().contains("monitor")).collect()
+        let host = host();
+        let mics = microphones(&host);
+        let default = default_source_id(&mics);
+        crate::cpal_mic::describe_inputs(mics, default.as_deref())
     }
     fn start_mic_from(&self, priority: &[String], sink: Sender<AudioChunk>) -> Result<Box<dyn CaptureStream>> {
         let priority = priority.to_vec();
         crate::cpal_mic::start_input_on_thread(
             "mic",
-            move || match crate::cpal_mic::first_available(&host(), &priority) {
+            move || match crate::cpal_mic::first_in(microphones(&host()), &priority) {
                 Some(d) => Ok(d),
-                None => host().default_input_device().context("no default microphone"),
+                None => default_mic(),
             },
             sink,
         )
     }
+}
+
+/// Real microphones. PipeWire also offers every output (and cpal's synthetic
+/// `default_sink`) as a capture device, which records what you hear; hide
+/// those, monitors, and the synthetic `default_input` (the default source is
+/// marked on its real device instead).
+fn microphones(host: &cpal::Host) -> Vec<cpal::Device> {
+    let pipewire = host.id().name().eq_ignore_ascii_case("pipewire");
+    let Ok(devs) = host.input_devices() else { return vec![] };
+    devs.filter(|d| {
+        let Ok(desc) = d.description() else { return false };
+        let id = d.id().map(|i| i.to_string()).unwrap_or_default();
+        is_microphone(pipewire, desc.direction(), &id, desc.name())
+    })
+    .collect()
+}
+
+fn is_microphone(pipewire: bool, direction: cpal::DeviceDirection, id: &str, name: &str) -> bool {
+    let id = id.to_lowercase();
+    // Only PipeWire reports outputs as duplex capture devices; ALSA duplex
+    // cards are real microphones.
+    (!pipewire || direction == cpal::DeviceDirection::Input)
+        && !id.ends_with("input_default")
+        && !id.contains("monitor")
+        && !name.to_lowercase().contains("monitor")
+}
+
+/// The sound server's default source, as the real device so logs and the
+/// settings page name it; cpal's generic default when it can't be resolved.
+fn default_mic() -> Result<cpal::Device> {
+    let host = host();
+    let mics = microphones(&host);
+    if let Some(id) = default_source_id(&mics) {
+        if let Some(d) = mics.into_iter().find(|d| d.id().is_ok_and(|i| i.to_string() == id)) {
+            return Ok(d);
+        }
+    }
+    host.default_input_device().context("no default microphone")
+}
+
+/// cpal id of the sound server's default source, matched by node name.
+fn default_source_id(mics: &[cpal::Device]) -> Option<String> {
+    let out = std::process::Command::new("pactl").arg("get-default-source").output().ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let node = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if node.is_empty() {
+        return None;
+    }
+    mics.iter().filter_map(|d| d.id().ok().map(|i| i.to_string())).find(|id| id.rsplit_once(':').map(|(_, n)| n) == Some(node.as_str()))
 }
 
 /// Generic shell: no Dock to hide from, no portable screencast exclusion.
@@ -147,5 +200,22 @@ impl Drop for MuteGuard {
         } else {
             std::process::Command::new("pactl").args(["set-sink-mute", "@DEFAULT_SINK@", "0"]).status()
         };
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_microphone;
+    use cpal::DeviceDirection::{Duplex, Input, Output};
+
+    #[test]
+    fn only_real_sources_are_microphones() {
+        assert!(is_microphone(true, Input, "pipewire:alsa_input.usb-display.mono-fallback", "Studio Display XDR Mono"));
+        assert!(!is_microphone(true, Input, "pipewire:input_default", "default_input"));
+        assert!(!is_microphone(true, Duplex, "pipewire:sink_default", "default_sink"));
+        assert!(!is_microphone(true, Duplex, "pipewire:alsa_output.usb-display.analog-stereo", "Studio Display XDR Analog Stereo"));
+        assert!(!is_microphone(true, Output, "pipewire:output_default", "default_output"));
+        assert!(!is_microphone(false, Input, "pulseaudio:alsa_output.x.monitor", "Monitor of Speakers"));
+        assert!(is_microphone(false, Duplex, "alsa:hw:1,0", "USB Audio"));
     }
 }

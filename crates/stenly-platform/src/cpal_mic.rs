@@ -102,14 +102,21 @@ pub fn is_virtual(name: &str) -> bool {
         .any(|v| n.contains(v))
 }
 
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn input_devices(host: &cpal::Host) -> Vec<stenly_core::platform::InputDevice> {
     let default = host.default_input_device().and_then(|d| d.id().ok()).map(|i| i.to_string());
     let Ok(devs) = host.input_devices() else { return vec![] };
+    describe_inputs(devs.collect(), default.as_deref())
+}
+
+/// Settings rows for `devs`; `default` is the id of the system default input.
+pub fn describe_inputs(devs: Vec<cpal::Device>, default: Option<&str>) -> Vec<stenly_core::platform::InputDevice> {
     let mut out: Vec<stenly_core::platform::InputDevice> = devs
+        .into_iter()
         .filter_map(|d| {
             let id = d.id().ok()?.to_string();
             let name = d.description().map(|x| x.name().to_string()).unwrap_or_else(|_| id.clone());
-            Some(stenly_core::platform::InputDevice { is_virtual: is_virtual(&name), is_default: Some(&id) == default.as_ref(), id, name })
+            Some(stenly_core::platform::InputDevice { is_virtual: is_virtual(&name), is_default: Some(id.as_str()) == default, id, name })
         })
         .collect();
     out.dedup_by(|a, b| a.id == b.id);
@@ -118,11 +125,16 @@ pub fn input_devices(host: &cpal::Host) -> Vec<stenly_core::platform::InputDevic
 
 /// First device in `priority` (matched by id, then by exact name, then by
 /// name prefix) that's connected right now.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn first_available(host: &cpal::Host, priority: &[String]) -> Option<cpal::Device> {
     if priority.is_empty() {
         return None;
     }
-    let devs: Vec<cpal::Device> = host.input_devices().ok()?.collect();
+    first_in(host.input_devices().ok()?.collect(), priority)
+}
+
+/// Like `first_available`, choosing only from `devs`.
+pub fn first_in(devs: Vec<cpal::Device>, priority: &[String]) -> Option<cpal::Device> {
     let id = |d: &cpal::Device| d.id().map(|i| i.to_string()).unwrap_or_default();
     let name = |d: &cpal::Device| d.description().map(|x| x.name().to_string()).unwrap_or_default();
     for want in priority {
