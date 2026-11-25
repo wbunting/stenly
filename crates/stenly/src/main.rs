@@ -728,21 +728,70 @@ fn watch_config(controller: gpui::Entity<controller::Controller>, cx: &mut App) 
 
 /// One stenly per user: two would double-record and double-prompt.
 fn single_instance_lock(config: &Config) -> anyhow::Result<()> {
-    use std::io::Write;
-    let dir = config.paths().data_dir;
-    std::fs::create_dir_all(&dir)?;
-    let path = dir.join("stenly.pid");
-    if let Ok(pid) = std::fs::read_to_string(&path)
-        && let Ok(pid) = pid.trim().parse::<i32>()
-            && pid != std::process::id() as i32 && process_alive(pid) {
-                anyhow::bail!("already running (pid {pid})");
-            }
-    let mut f = std::fs::File::create(&path)?;
-    write!(f, "{}", std::process::id())?;
+    let lock = acquire_instance_lock(&config.paths().data_dir)?;
+    // Held until exit; the OS releases it even after a crash.
+    std::mem::forget(lock);
     Ok(())
 }
 
-fn process_alive(pid: i32) -> bool {
-    // `kill -0` without a libc dependency.
-    std::process::Command::new("kill").args(["-0", &pid.to_string()]).stderr(std::process::Stdio::null()).status().is_ok_and(|s| s.success())
+/// Take an exclusive lock on `stenly.pid` and record our pid in it.
+///
+/// A pid alone went stale: after a reboot the recorded pid could belong to an
+/// unrelated process, and Stenly then refused to start. The kernel drops the
+/// lock when its holder exits, so only a live Stenly can block a launch.
+fn acquire_instance_lock(dir: &std::path::Path) -> anyhow::Result<std::fs::File> {
+    use std::io::Write;
+    std::fs::create_dir_all(dir)?;
+    let path = dir.join("stenly.pid");
+    let mut f = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(false)
+        .read(true)
+        .write(true)
+        .open(&path)?;
+    match f.try_lock() {
+        Ok(()) => {}
+        Err(std::fs::TryLockError::WouldBlock) => {
+            let pid = std::fs::read_to_string(&path).unwrap_or_default();
+            anyhow::bail!("already running (pid {})", pid.trim());
+        }
+        Err(std::fs::TryLockError::Error(e)) => return Err(e.into()),
+    }
+    f.set_len(0)?;
+    write!(f, "{}", std::process::id())?;
+    f.flush()?;
+    Ok(f)
+}
+
+#[cfg(test)]
+mod instance_lock_tests {
+    use super::acquire_instance_lock;
+
+    fn temp_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("stenly-lock-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn stale_pid_file_does_not_block_launch() {
+        let dir = temp_dir("stale");
+        // A pid left by a previous boot, now owned by some live process.
+        std::fs::write(dir.as_path().join("stenly.pid"), "1").unwrap();
+        let lock = acquire_instance_lock(dir.as_path()).expect("stale pid must not block");
+        let pid = std::fs::read_to_string(dir.as_path().join("stenly.pid")).unwrap();
+        assert_eq!(pid, std::process::id().to_string());
+        drop(lock);
+    }
+
+    #[test]
+    fn second_instance_is_refused_until_first_exits() {
+        let dir = temp_dir("second");
+        let first = acquire_instance_lock(dir.as_path()).unwrap();
+        let err = acquire_instance_lock(dir.as_path()).unwrap_err();
+        assert!(format!("{err:#}").contains("already running"), "{err:#}");
+        drop(first);
+        acquire_instance_lock(dir.as_path()).expect("lock is free once the holder exits");
+    }
 }
